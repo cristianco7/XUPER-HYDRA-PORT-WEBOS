@@ -17,7 +17,7 @@ Estados:
 
 | ID | Pantalla | Diferencia | Motivo | Cómo cerrarla |
 | --- | --- | --- | --- | --- |
-| A1 | Todas | No hay comparación píxel a píxel contra XuperTV real | No existen capturas verificables de Android TV en el repositorio | Capturar las pantallas en el APK original (dispositivo autorizado) y comparar a 1920×1080 |
+| A1 | Todas | Comparación píxel a píxel global | **Parcial:** capturadas las pantallas de referencia reales en WSA 1920×1080 (`scratch/xuper-*.png`, `ui-*.xml`). El panel del reproductor y el diálogo *Ajuste de reproducir* ya coinciden en geometría; el resto de pantallas sigue sin comparación completa | Capturar el resto de pantallas y comparar a 1920×1080 |
 | A2 | Todas | Métrica tipográfica distinta | La APK usa `sans-serif` del sistema Android; el port usa `Roboto, Helvetica, Arial` | Igualar con una fuente métricamente compatible o aceptar la diferencia tras la referencia A1 |
 | A3 | Bienvenida | Altura de las cajas de nombre/versión | `wrap_content` depende de la fuente; el port fija `line-height` | Ajustar tras A1/A2 |
 | A4 | Inicio | Logo de la home | Es dinámico; los hijos estáticos están `gone` | Usar el logo real del backend o confirmar el fallback con A1 |
@@ -39,6 +39,8 @@ Estados:
 | A20 | Reproductor | Superficie de vídeo en capturas headless | No hay fotograma decodificado en headless | Probar en el televisor |
 | A21 | Inicio | Aviso de texto `mTextNotice` | Está `gone` y lo activa el backend | Fuente de avisos autorizada |
 | A22 | Reproductor | Tiempo de auto-ocultado de la barra | El recurso no expone la constante; el port usa 5 s | Medir en la app real y ajustar |
+| A23 | Reproductor | Diálogo de FEEDBACK | El botón existe y es enfocable, pero no abre nada. La APK real usa un diálogo de 920×784 con motivos y envío | Reconstruir `dialog_feedback*.xml` y su envío |
+| A24 | Inicio | Franja de logos de marca en EXPLORAR | Los logos no están en la APK; se muestran tiles grises | Recursos del backend o captura de referencia |
 
 ---
 
@@ -86,23 +88,37 @@ Estados:
 | D3 | Interceptación TLS | Prohibida | No se hará |
 | D4 | Instalación en el LG 43LM6300PDB | **Resuelto:** `ares-install` falla en el paso `ls` posterior a la subida, pero el servicio Luna `com.webos.appInstallService/dev/install` instala correctamente | Usar `tools/tv_deploy.mjs` (subida SFTP + instalación Luna) |
 | D5 | Pruebas de códec/HLS en webOS 4 | **Resuelto para VOD:** H.264 directo; HEVC/TS con tirones en el camino nativo, fluido al remuxear a MP4 fragmentado | HLS live sigue sin probar (canales son marcadores) |
-| D6 | IPK | **Resuelto:** `dist/com.webosflux.xuptertv.fidelity_1.4.1_all.ipk` incluye app + servicio + FFmpeg 7.0.2 armhf y se instala en un paso | Cerrar A/B pendientes antes de publicar como release |
+| D6 | IPK | **Resuelto:** `dist/com.webosflux.xuptertv.fidelity_1.4.5_all.ipk` incluye app + servicio + FFmpeg 7.0.2 armhf y se instala en un paso | Cerrar A/B pendientes antes de publicar como release |
+
+---
+
+## G. Resuelto en 1.4.5
+
+| ID | Qué | Evidencia |
+| --- | --- | --- |
+| G1 | Panel del reproductor con datos reales (IDIOMA/RESOLUCIÓN/FORMATO/OPCIONES/FEEDBACK) | `mediaInfo` real (`por,spa,eng`, 2 subtítulos, 1 pista 720p) y sonda `scratch/probe-panel.mjs` |
+| G2 | Diálogo *Ajuste de reproducir* con audio e idioma de subtítulos del portal | Filas en y=281/406/482/592/702, caja 1145×775 en y=126 |
+| G3 | Subtítulos reales visibles en el reproductor | Cues SRT cargados por el proxy `/sub/<token>.srt` y renderizados al instante de tiempo |
+| G4 | Subtítulos ON con Español por defecto, respetando la elección del usuario | `applySubtitleDefaults` + `vodSubChosen` |
+| G5 | Cambio de idioma de audio mediante relay (`&a=<índice>`) | `switchAudioTrack` + `restartCurrentPlayback` |
+| G6 | RESOLUCIÓN con el mapeo real de la APK (`720p`→1080P, `1080p`→4K, 4K sintético) | `ud/n1.dd()` + `qualityChoices` |
+| G7 | Orden de Tamaño (Normal, Grande, Pequeño) y sin fila SUBTÍTULO en el panel | Captura real `scratch/xuper-idioma-dialog.png`, `scratch/panel-crop.png` |
+| G8 | El panel/diálogo ya no se cierran al cambiar audio o calidad | `stopPlayerVideo` conserva panel y cues; `back()` y cambio de pantalla los cierran |
 
 ---
 
 ## E. Riesgos si se publica ahora
 
 1. El IPK antiguo de `webos/fidelity/` muestra el prototipo; el artefacto
-   válido es `dist/com.webosflux.xuptertv.fidelity_1.4.1_all.ipk`.
-2. La build 1.4.1 contiene el port, el servicio y FFmpeg, y está verificada en
+   válido es `dist/com.webosflux.xuptertv.fidelity_1.4.5_all.ipk`.
+2. La build 1.4.5 contiene el port, el servicio y FFmpeg, y está verificada en
    la TV, pero **no es una release**: le faltan los flujos B1–B8 y A18.
 3. `assets/original/` viaja en el IPK; sin él no se reproduce la estética real.
-4. Afirmar "100 % fidelidad" sin A1 (referencia visual de Android TV) sería
-   falso.
+4. Afirmar "100 % fidelidad" sin A1 (referencia visual completa) sería falso.
 5. Los canales de TV en vivo son marcadores: no hay `v6/getLiveData` ni
    reproducción HLS real.
 
-**Recomendación:** usar la build 1.4.1 solo para probar en el televisor. No
+**Recomendación:** usar la build 1.4.5 solo para probar en el televisor. No
 publicarla como release hasta cerrar A1/A2, A18 y los flujos B1–B8, y volver a
 capturar todas las pantallas con la referencia al lado.
 

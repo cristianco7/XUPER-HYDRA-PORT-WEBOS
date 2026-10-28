@@ -2165,218 +2165,186 @@ div, section, span { outline: none; }
   word-wrap: break-word;
 }
 
+/* In-player settings panel (com.module.playsetting.view.PlaySettingView).
+   The APK adds a VerticalGridView with 80px left padding, 60px bottom
+   padding and 25px between rows. Rows are 32px #858d94 titles plus a 72px
+   grid of 306x72 pills (layout_type_adapter_subtitle.xml). */
 .player-playsetting-view {
   position: absolute;
   left: 0;
   right: 0;
+  top: 0;
   bottom: 0;
-  /* Height follows the content (3 sections for a movie, 4 for a series) and
-     caps at 560px, roughly the bottom half of the 1080p canvas. The APK builds
-     this panel in code, so there is no layout XML to copy an exact height from. */
-  height: auto;
-  max-height: 560px;
-  background: -webkit-linear-gradient(bottom, rgba(12, 14, 18, 0.98) 0%, rgba(12, 14, 18, 0.88) 75%, transparent 100%);
-  background: linear-gradient(to top, rgba(12, 14, 18, 0.98) 0%, rgba(12, 14, 18, 0.88) 75%, transparent 100%);
   display: none;
   z-index: 25;
   box-sizing: border-box;
-  padding: 0 80px 28px 80px;
+  padding: 0 80px 60px 80px;
+  -webkit-box-orient: vertical;
+  flex-direction: column;
+  -webkit-box-pack: end;
+  justify-content: flex-end;
 }
 .player-playsetting-view.is-active {
-  display: block;
+  display: -webkit-box;
+  display: flex;
 }
 
 .psv-scroll {
-  height: auto;
-  max-height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-top: 20px;
+  max-height: 100%;
+  padding: 0;
 }
 .psv-scroll::-webkit-scrollbar { display: none; }
 
-.psv-section {
-  margin-bottom: 26px;
-}
-
-.psv-sec-title {
-  font-size: 30px;
-  color: #858d94;
-  font-weight: 500;
-  margin-bottom: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
 .psv-row {
+  margin-bottom: 25px;
+  flex-shrink: 0;
+}
+.psv-row:last-child { margin-bottom: 0; }
+.psv-row.is-hidden { display: none; }
+
+.psv-title {
+  font-size: 32px;
+  line-height: 40px;
+  color: #858d94;
+  font-weight: 400;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.psv-row.is-row-focused .psv-title {
+  font-size: 40px;
+  line-height: 48px;
+  color: #ffffff;
+}
+
+.psv-grid,
+.psv-seasons-row,
+.psv-groups-row {
   display: -webkit-box;
   display: flex;
-  gap: 16px;
+  margin-top: 12px;
   overflow-x: auto;
-  padding: 4px 0;
+  overflow-y: hidden;
+  padding: 0;
 }
-.psv-row::-webkit-scrollbar { display: none; }
+.psv-grid::-webkit-scrollbar,
+.psv-seasons-row::-webkit-scrollbar,
+.psv-groups-row::-webkit-scrollbar { display: none; }
 
-.psv-btn {
-  height: 64px;
-  padding: 0 28px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.12);
+.psv-btn,
+.psv-ep-btn {
+  width: 306px;
+  min-width: 306px;
+  height: 72px;
+  margin-right: 6px;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 0;
+  background: rgba(85, 91, 102, 0.8);   /* #cc555b66 */
   color: #ffffff;
-  font-size: 26px;
-  border: 2px solid transparent;
+  font-size: 32px;
+  font-weight: 400;
   outline: none;
   cursor: pointer;
+  position: relative;
+  box-sizing: border-box;
   display: -webkit-inline-box;
   display: inline-flex;
   -webkit-box-align: center;
   align-items: center;
+  -webkit-box-pack: center;
+  justify-content: center;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   flex-shrink: 0;
-  transition: all 0.15s ease;
 }
-.psv-btn.psv-btn-config {
-  width: 306px;
-  -webkit-box-pack: center;
-  justify-content: center;
+.psv-btn.is-focused,
+.psv-ep-btn.is-focused {
+  background: #c91923;                 /* color_bnt_focused */
 }
-.psv-check {
-  display: none;
-  margin-right: 8px;
-  font-weight: bold;
-  color: #60a5fa;
-}
-.psv-btn.is-selected .psv-check {
-  display: inline-block;
-}
-.psv-btn.is-focused {
-  background: #c91923 !important;
-  color: #ffffff !important;
-  border-color: #ff4d4f !important;
-  box-shadow: 0 0 20px rgba(201, 25, 35, 0.7);
-  -webkit-transform: scale(1.04);
-  transform: scale(1.04);
-}
-
 .psv-ep-btn {
-  min-width: 90px;
-  height: 64px;
-  padding: 0 16px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.12);
-  color: #ffffff;
-  font-size: 26px;
-  font-weight: bold;
-  display: -webkit-box;
-  display: flex;
-  -webkit-box-align: center;
-  align-items: center;
-  -webkit-box-pack: center;
-  justify-content: center;
-  border: 2px solid transparent;
-  outline: none;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: all 0.15s ease;
+  width: auto;
+  min-width: 150px;
+  font-size: 40px;
 }
 .psv-ep-btn.is-current {
-  border-color: #3b82f6;
-  background: rgba(59, 130, 246, 0.25);
-  color: #ffffff;
-}
-.psv-ep-btn.is-current::before {
-  content: '▶';
-  font-size: 14px;
-  color: #60a5fa;
-  margin-right: 4px;
-}
-.psv-ep-btn.is-focused {
-  background: #c91923 !important;
-  color: #ffffff !important;
-  border-color: #ff4d4f !important;
-  box-shadow: 0 0 20px rgba(201, 25, 35, 0.7);
-  -webkit-transform: scale(1.08);
-  transform: scale(1.08);
+  background: rgba(85, 91, 102, 0.95);
 }
 
-.psv-seasons-row {
-  display: -webkit-box;
-  display: flex;
-  gap: 12px;
-  margin-bottom: 12px;
+/* Selected marker: 25x25 white circle, inline before the label so the
+   check + text group stays centered (matches the real pills). */
+.psv-check {
+  display: none;
+  width: 25px;
+  height: 25px;
+  margin-right: 12px;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #555b66;
+  font-size: 17px;
+  line-height: 25px;
+  text-align: center;
+  font-weight: bold;
+  flex-shrink: 0;
 }
-.psv-season-btn {
-  height: 42px;
-  padding: 0 20px;
-  border-radius: 21px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #9aa2b1;
-  font-size: 20px;
-  border: 2px solid transparent;
-  outline: none;
-  cursor: pointer;
-}
-.psv-season-btn.is-selected {
-  border-color: #3b82f6;
-  color: #ffffff;
-}
-.psv-season-btn.is-focused {
-  background: #c91923;
-  color: #ffffff;
+.psv-btn.is-selected .psv-check,
+.psv-ep-btn.is-current .psv-check {
+  display: block;
 }
 
-.psv-groups-row {
-  display: -webkit-box;
-  display: flex;
-  gap: 10px;
-  margin-bottom: 12px;
-}
+.psv-season-btn,
 .psv-group-btn {
-  height: 38px;
-  padding: 0 18px;
-  border-radius: 19px;
-  background: rgba(255, 255, 255, 0.06);
-  color: #8a91a0;
-  font-size: 19px;
-  border: 1.5px solid transparent;
+  height: 72px;
+  min-width: 120px;
+  margin-right: 6px;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 0;
+  background: rgba(85, 91, 102, 0.8);
+  color: #ffffff;
+  font-size: 28px;
   outline: none;
   cursor: pointer;
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
+.psv-season-btn.is-selected,
 .psv-group-btn.is-selected {
-  color: #e50914;
-  border-color: #e50914;
+  background: #c91923;
 }
+.psv-season-btn.is-focused,
 .psv-group-btn.is-focused {
   background: #c91923;
-  color: #ffffff;
 }
 
-/* Modal Dialog: Ajuste de reproducir (SelectSubTitleAndAudioDialog) */
+/* Modal Dialog: Ajuste de reproducir (dialog_select_subtitle_audio.xml).
+   Geometry measured on the running app at 1920x1080: box 1145x775 at
+   y=126, header 91, labels 160 wide, pills 255x66. */
 .dialog-playsettings-overlay {
   position: absolute;
   left: 0;
   top: 0;
   width: 1920px;
   height: 1080px;
-  background: rgba(0, 0, 0, 0.75);
+  background: rgba(0, 0, 0, 0.6);
   display: none;
-  -webkit-box-align: center;
-  align-items: center;
-  -webkit-box-pack: center;
-  justify-content: center;
   z-index: 50;
 }
 .dialog-playsettings-overlay.is-active {
-  display: -webkit-box;
-  display: flex;
+  display: block;
 }
 
 .dialog-playsettings-box {
+  position: absolute;
+  left: 50%;
+  top: 126px;
+  margin-left: -572px;
   width: 1145px;
-  max-height: 860px;
-  background: #23272f;
-  border-radius: 16px;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.9);
+  height: 775px;
+  background: #26282c;
+  border-radius: 12px;
   overflow: hidden;
   display: -webkit-box;
   display: flex;
@@ -2385,18 +2353,18 @@ div, section, span { outline: none; }
 }
 
 .dps-header {
-  height: 96px;
-  line-height: 96px;
+  height: 91px;
+  line-height: 91px;
   text-align: center;
   font-size: 36px;
-  font-weight: 500;
+  font-weight: 400;
   color: #ffffff;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  background: #2a2b2d;
   flex-shrink: 0;
 }
 
 .dps-body {
-  padding: 40px 74px 20px 74px;
+  padding: 64px 0 0 74px;
   overflow-y: auto;
   -webkit-box-flex: 1;
   flex: 1;
@@ -2408,16 +2376,20 @@ div, section, span { outline: none; }
   display: flex;
   -webkit-box-align: center;
   align-items: center;
-  margin-bottom: 34px;
-  min-height: 74px;
 }
+.dps-row.is-hidden { display: none; }
+#dps-row-audio { height: 66px; margin-bottom: 59px; }
+#dps-row-switch { height: 46px; margin-bottom: 30px; }
+#dps-row-lang { height: 66px; margin-bottom: 44px; }
+#dps-row-size { height: 66px; margin-bottom: 44px; }
+#dps-row-style { height: 66px; margin-bottom: 0; }
 
 .dps-label {
-  width: 138px;
-  min-width: 138px;
+  width: 160px;
+  min-width: 160px;
   font-size: 28px;
   color: #ffffff;
-  font-weight: 500;
+  font-weight: 400;
 }
 
 .dps-options {
@@ -2425,89 +2397,111 @@ div, section, span { outline: none; }
   display: flex;
   -webkit-box-align: center;
   align-items: center;
-  gap: 18px;
   overflow-x: auto;
   -webkit-box-flex: 1;
   flex: 1;
-  padding: 4px 0;
+  padding: 0;
 }
 .dps-options::-webkit-scrollbar { display: none; }
 
 .dps-btn {
-  height: 64px;
-  padding: 0 32px;
-  border-radius: 32px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #d1d5db;
-  font-size: 24px;
-  border: 2px solid transparent;
+  width: 255px;
+  min-width: 255px;
+  height: 66px;
+  margin-right: 27px;
+  padding: 0 40px;
+  border-radius: 12px;
+  background: #3c3c41;
+  color: #ffffff;
+  font-size: 28px;
+  font-weight: 400;
+  border: 0;
   outline: none;
   cursor: pointer;
   white-space: nowrap;
+  position: relative;
   display: -webkit-inline-box;
   display: inline-flex;
   -webkit-box-align: center;
   align-items: center;
-  gap: 8px;
-  transition: all 0.15s ease;
+  -webkit-box-pack: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
+/* In the real dialog the focus fill is red and the selected option keeps the
+   dark pill with a white check badge; they are independent states. */
 .dps-btn.is-selected {
-  background: #c91923;
+  background: #3c3c41;
   color: #ffffff;
-  border-color: #c91923;
 }
 .dps-btn.is-selected::after {
-  content: ' ✔';
+  content: '✔';
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  width: 30px;
+  height: 30px;
+  margin-top: -15px;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #3c3c41;
   font-size: 18px;
-  margin-left: 6px;
+  line-height: 30px;
+  text-align: center;
+  font-weight: bold;
 }
 .dps-btn.is-focused {
-  border-color: #ffffff !important;
-  box-shadow: 0 0 18px rgba(255, 255, 255, 0.6);
-  -webkit-transform: scale(1.05);
-  transform: scale(1.05);
+  background: #c91923;
+  color: #ffffff;
 }
 
 .dps-switch {
+  position: relative;
   width: 106px;
-  height: 51px;
-  border-radius: 26px;
+  height: 46px;
+  border-radius: 23px;
   background: #3e4451;
   display: -webkit-box;
   display: flex;
   -webkit-box-align: center;
   align-items: center;
-  padding: 0 8px;
+  -webkit-box-pack: start;
+  justify-content: flex-start;
+  padding: 0 5px;
+  margin-left: 40px;
   cursor: pointer;
   outline: none;
-  border: 2px solid transparent;
-  transition: background 0.2s ease;
+  border: 0;
+  box-sizing: border-box;
 }
 .dps-switch .dps-switch-dot {
-  width: 35px;
-  height: 35px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   background: #ffffff;
-  transition: transform 0.2s ease;
 }
 .dps-switch .dps-switch-text {
-  font-size: 18px;
-  font-weight: bold;
+  position: absolute;
+  left: auto;
+  right: 14px;
+  top: 0;
+  line-height: 46px;
+  font-size: 20px;
+  font-weight: 600;
   color: #ffffff;
-  margin-left: 8px;
+  pointer-events: none;
 }
 .dps-switch.is-on {
-  background: #16a34a;
+  background: #3a66fe;
   -webkit-box-pack: end;
   justify-content: flex-end;
 }
 .dps-switch.is-on .dps-switch-text {
-  margin-left: 0;
-  margin-right: 8px;
+  left: 14px;
+  right: auto;
 }
 .dps-switch.is-focused {
-  border-color: #ffffff;
-  box-shadow: 0 0 16px rgba(255, 255, 255, 0.6);
+  box-shadow: 0 0 0 3px #ffffff inset;
 }
 
 .dps-sub-subrow {
@@ -2520,7 +2514,7 @@ div, section, span { outline: none; }
 
 .dps-color-preview {
   display: inline-block;
-  padding: 2px 8px;
+  padding: 2px 10px;
   border-radius: 4px;
   font-weight: bold;
 }
@@ -2537,36 +2531,31 @@ div, section, span { outline: none; }
 }
 
 .dps-footer {
-  height: 110px;
+  height: 73px;
+  margin-bottom: 12px;
   display: -webkit-box;
   display: flex;
   -webkit-box-align: center;
   align-items: center;
   -webkit-box-pack: center;
   justify-content: center;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
   flex-shrink: 0;
 }
 
 .dps-exit-btn {
   width: 380px;
-  height: 72px;
+  height: 73px;
   border-radius: 36px;
-  background: #4b5563;
+  background: #4f5155;
   color: #ffffff;
-  font-size: 30px;
-  font-weight: 500;
-  border: 2px solid transparent;
+  font-size: 32px;
+  font-weight: 400;
+  border: 0;
   outline: none;
   cursor: pointer;
-  transition: all 0.15s ease;
 }
 .dps-exit-btn.is-focused {
-  background: #c91923 !important;
-  border-color: #ffffff;
-  box-shadow: 0 0 20px rgba(201, 25, 35, 0.7);
-  -webkit-transform: scale(1.04);
-  transform: scale(1.04);
+  background: #c91923;
 }
 
 /* Subtitle size and color styling */

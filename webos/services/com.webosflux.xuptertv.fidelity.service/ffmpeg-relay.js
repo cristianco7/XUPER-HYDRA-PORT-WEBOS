@@ -25,8 +25,13 @@ function log() {
   console.log.apply(console, ['[relay]'].concat(args));
 }
 
+/* The packaged mode is already 0755 (tools/fix_ipk_modes.py). Try chmod only
+   when it is missing, so a root-owned install does not log a false alarm. */
 try {
-  fs.chmodSync(FFMPEG, parseInt('755', 8));
+  var mode = fs.statSync(FFMPEG).mode;
+  if (!(mode & parseInt('111', 8))) {
+    fs.chmodSync(FFMPEG, parseInt('755', 8));
+  }
 } catch (e) {
   /* Installed packages are owned by root; the service user cannot chmod them.
      Record it: if the packaged mode is wrong, spawn() would fail with EACCES. */

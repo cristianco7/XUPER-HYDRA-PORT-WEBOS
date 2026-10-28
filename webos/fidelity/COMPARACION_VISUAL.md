@@ -295,11 +295,66 @@ Notas:
 
 ---
 
+## 7 bis. Panel del reproductor y diálogo *Ajuste de reproducir*
+
+Referencia real capturada en WSA (1920×1080):
+`scratch/xuper-idioma-dialog.png`, `scratch/panel-crop.png`,
+`scratch/ui-idioma.xml`, `scratch/ui-panel-real.xml`. Medición propia:
+`scratch/probe-panel.mjs` (Chrome headless 1920×1080).
+
+Diálogo (`dialog-playsettings`), película *La isla olvidada*:
+
+| Elemento | Real | Port | Resultado |
+| --- | --- | --- | --- |
+| Caja | x 388, y 126, 1145×775 | x 388, y 126, 1145×775 | ✅ |
+| Cabecera | alto 91, `#2a2b2d` | alto 91, `#2a2b2d` | ✅ |
+| Fila Audio | y 281, alto 66 | y 281, alto 66 | ✅ |
+| Interruptor Subtítulo | y 406, alto 46, 106×46 | y 406, alto 46, 106×46 | ✅ |
+| Fila Idioma | y 482, alto 66 | y 482, alto 66 | ✅ |
+| Fila Tamaño | y 592, alto 66 | y 592, alto 66 | ✅ |
+| Fila Estilo | y 702, alto 66 | y 702, alto 66 | ✅ |
+| Pills | 255×66, radio 12, `#3c3c41` | 255×66, radio 12, `#3c3c41` | ✅ |
+| Foco | rojo `#c91923` | rojo `#c91923` | ✅ |
+| Selección | pill oscuro + check blanco a la derecha | igual | ✅ |
+| Audio real | Portugués / Español / Inglés (Español por defecto) | Portugués / Español* / Inglés | ✅ |
+| Subtítulos reales | Español / Inglés, ON por defecto | Español* / Inglés, ON | ✅ |
+| Orden Tamaño | Normal / Grande / Pequeño | Normal* / Grande / Pequeño | ✅ |
+| Salida | 380×73, radio 36 | 380×73, radio 36 | ✅ |
+
+Panel del reproductor (`player-playsetting-view`), misma película:
+
+| Elemento | Real | Port | Resultado |
+| --- | --- | --- | --- |
+| Título IDIOMA | y 292, 32 px | y 292 | ✅ |
+| Pill Configuración | 306×72, rojo al enfocar | 306×72 | ✅ |
+| RESOLUCIÓN | y 449; pills `1080P` y `4K` | y 449; `1080P*`, `4K` | ✅ |
+| FORMATO DE PANTALLA | y 598 | y 598 | ✅ |
+| OPCIONES DE REPRODUCTOR | y 747 | y 747 | ✅ |
+| FEEDBACK | y 896 | y 896 | ✅ |
+| Check de selección | círculo blanco 25 px, inline | igual | ✅ |
+
+Notas:
+
+- La app real **remapea** las calidades del portal (`720p`→`1080P`,
+  `1080p`→`4K`) en `ud/n1.dd()`; el port lo replica y añade el pill `4K`
+  sintético cuando el portal solo ofrece la copia 720p (no hay rendición
+  separada a la que cambiar).
+- El panel real no tiene fila SUBTÍTULO: el idioma, tamaño y estilo viven en el
+  diálogo, al que se entra por `IDIOMA → Configuración`.
+- Los subtítulos se piden al CDN a través del proxy del servicio
+  (`/sub/<token>.srt`) porque el CDN no manda CORS.
+- Cambiar el idioma de audio requiere el relay FFmpeg (`&a=<índice>`): el
+  `<video>` de webOS no puede elegir PIDs dentro del TS.
+- La fila FEEDBACK existe y se enfoca, pero el diálogo real de feedback
+  (920×784) sigue pendiente (A23).
+
+---
+
 ## 8. Diferencias residuales (no bloqueantes de geometría)
 
 | # | Diferencia | Estado |
 | --- | --- | --- |
-| 1 | Sin capturas de referencia de Android TV | **Bloqueante para afirmar 100 %** |
+| 1 | Sin capturas de referencia de Android TV | **Parcial:** panel y diálogo comparados contra WSA real; resto pendiente |
 | 2 | Métrica de fuente: el APK usa `sans-serif` del sistema; el port cae a Roboto/Arial | Pendiente de referencia visual |
 | 3 | Logo de la home dinámico | Fallback de texto documentado |
 | 4 | Iconos de pestaña dinámicos | Solo texto |

@@ -435,7 +435,10 @@ function portalServiceCall(method, params, done) {
     settled = true;
     done(error, payload);
   }
-  if (hasLuna()) {
+  /* webOSTV.js defines webOS.service.request even in a plain browser; without
+     the native bridge it only reports an error, so the desktop harness must
+     skip the Luna branch entirely. */
+  if (hasLuna() && window.PalmServiceBridge) {
     try {
       window.webOS.service.request('luna://' + serviceId, {
         method: method,
@@ -454,14 +457,16 @@ function portalServiceCall(method, params, done) {
       }
     }
   }
-    if (vodApi.devServiceUrl && !hasLuna()) {
-      apiRequest(String(vodApi.devServiceUrl).replace(/\/$/, '') + '/' + method + '?' + queryString(params || {}),
-        function (error, payload) { finish(error, payload); }, null);
-      return true;
-    }
-    finish('El servicio XuperTV no está disponible', null);
-    return false;
+  /* Desktop harness: reach the same methods over plain HTTP when the Luna
+     bridge is missing or rejected the request (webOSTV.js on a browser). */
+  if (vodApi.devServiceUrl) {
+    apiRequest(String(vodApi.devServiceUrl).replace(/\/$/, '') + '/' + method + '?' + queryString(params || {}),
+      function (error, payload) { finish(error, payload); }, null);
+    return true;
   }
+  finish('El servicio XuperTV no está disponible', null);
+  return false;
+}
 
   function startServiceKeepAlive() {
     if (!hasLuna()) { return; }
@@ -798,6 +803,7 @@ function portalServiceCall(method, params, done) {
     playerEpisode: null,
     streamError: '',
     streamMode: 'normal',
+    trackIndex: 0,
     channelsOpen: false,
     infobar: true,
     infoTimer: null,
@@ -895,6 +901,7 @@ function portalServiceCall(method, params, done) {
     state.focus = node;
     node.classList.add('is-focused');
     if (node._onFocus) { node._onFocus(); }
+    renderPlaySettingRowFocus();
     /* The tab rail expands while it holds focus and collapses to icons as soon
        as the content takes focus (observed on the running app). */
     var rail = $('home-tabs');
@@ -992,12 +999,18 @@ function portalServiceCall(method, params, done) {
     if (target) { target.classList.add('is-active'); }
     state.screen = name;
     if (name !== 'player' && name !== 'detail') {
+      if (dialogPlaySettingsOpen) { closePlaySettingsDialog(); }
+      if (playSettingViewOpen) { closePlaySettingView(); }
       var scrPlayer = $('screen-player');
       if (scrPlayer) {
         scrPlayer.classList.remove('is-mini');
         scrPlayer.classList.remove('is-active');
       }
       stopPlayerVideo();
+      /* Really leaving the player: drop the subtitle cues as well. */
+      subtitleSeq++;
+      activeSubtitleCues = [];
+      if (playerSubtitles) { playerSubtitles.innerHTML = ''; }
     }
   }
 
@@ -1006,11 +1019,12 @@ function portalServiceCall(method, params, done) {
     var now = Date.now();
     if (now - lastBackTime < 250) { return; }
     lastBackTime = now;
+    /* The audio/subtitle dialog can now open from the details screen too. */
+    if (dialogPlaySettingsOpen) {
+      closePlaySettingsDialog();
+      return;
+    }
     if (state.screen === 'player') {
-      if (dialogPlaySettingsOpen) {
-        closePlaySettingsDialog();
-        return;
-      }
       if (playSettingViewOpen) {
         closePlaySettingView();
         return;
@@ -1768,6 +1782,11 @@ function portalServiceCall(method, params, done) {
       state.detailEpisode = item.episodes[0];
     }
 
+    /* New title: forget the previous audio/subtitle/rendition choice and ask
+       the portal for this one's real tracks (cached for the dialog/panel). */
+    resetMediaSelection();
+    ensureMediaInfo(item);
+
     buildDetail(item);
     showScreen('detail');
 
@@ -1910,6 +1929,7 @@ function portalServiceCall(method, params, done) {
       btn._activate = (function (kind, it) {
         return function () {
           if (kind === 0) { expandToFullscreen(it, state.detailEpisode); }
+          else if (kind === 1) { openPlaySettingsDialog(it); }
           else if (kind === 3) {
             state.favs[it.id] = !state.favs[it.id];
           } else if (kind === 4) {
@@ -2797,6 +2817,12 @@ function portalServiceCall(method, params, done) {
   var psvBtnConfig = null;
   var psvBtnP1 = null;
   var psvBtnP2 = null;
+  var psvSecAudio = null;
+  var psvSecQuality = null;
+  var psvQualityRow = null;
+  var psvSecAspect = null;
+  var psvSecPlayer = null;
+  var psvBtnFeedback = null;
   var psvAspectRow = null;
 
   var dpsAudioOptions = null;
@@ -2815,12 +2841,22 @@ function portalServiceCall(method, params, done) {
   var playSettingTimer = null;
   var currentEpGroupIndex = 0;
   var vodCurrentAudioTrack = 0;
+  /* Once the user picks a language we stop auto-selecting the preferred one. */
+  var vodAudioChosen = false;
   var vodCurrentSubtitle = null;
   var vodSubActive = false;
+  /* True once the user flips the switch or picks a language; from then on the
+     default (Spanish when available) no longer overrides the choice. */
+  var vodSubChosen = false;
+  var subtitleSeq = 0;
   var vodSubSize = 'normal';
   var vodSubStyle = 'white';
   var playerCurrentAspect = 'contain';
   var activeSubtitleCues = [];
+  /* mediaInfo payloads keyed by episode/movie content id. */
+  var mediaInfoCache = {};
+  var mediaInfoPending = {};
+  var dialogReturnFocus = null;
 
   function parseTimestamp(s) {
     if (!s) return 0;
@@ -2853,6 +2889,8 @@ function portalServiceCall(method, params, done) {
   }
 
   function loadSubtitleTrack(sub) {
+    subtitleSeq++;
+    var mySeq = subtitleSeq;
     if (!sub || !sub.url) {
       activeSubtitleCues = [];
       if (playerSubtitles) playerSubtitles.innerHTML = '';
@@ -2862,6 +2900,7 @@ function portalServiceCall(method, params, done) {
       var xhr = new XMLHttpRequest();
       xhr.open('GET', sub.url, true);
       xhr.onload = function () {
+        if (mySeq !== subtitleSeq) { return; }
         if (xhr.status >= 200 && xhr.status < 300) {
           activeSubtitleCues = parseSRT(xhr.responseText);
         }
@@ -2903,6 +2942,161 @@ function portalServiceCall(method, params, done) {
     }
   }
 
+  /* ---- Real portal audio/subtitle metadata -------------------------------
+     PlaySettingView and the "Ajuste de reproducir" dialog read the same data
+     the portal returns for startPlayVOD: the audio PID list and the subtitle
+     file list.  It is fetched once per episode/movie and cached; playback
+     still goes through resolve(). */
+  function playSettingsItem() {
+    if (state.screen === 'detail') { return state.detail || null; }
+    return state.playerItem || state.detail || null;
+  }
+
+  /* Called when a different title is opened, never when zapping episodes. */
+  function resetMediaSelection() {
+    vodCurrentAudioTrack = 0;
+    vodAudioChosen = false;
+    vodCurrentSubtitle = null;
+    vodSubActive = false;
+    vodSubChosen = false;
+    subtitleSeq++;
+    state.trackIndex = 0;
+    activeSubtitleCues = [];
+    if (playerSubtitles) { playerSubtitles.innerHTML = ''; }
+  }
+
+  function mediaInfoEpisode(item) {
+    if (!item) { return null; }
+    if (isSeriesItem(item)) {
+      if (state.screen === 'player' && state.playerEpisode) { return state.playerEpisode; }
+      if (state.detailEpisode) { return state.detailEpisode; }
+      return (item.episodes && item.episodes[0]) || null;
+    }
+    return null;
+  }
+
+  function mediaInfoKey(item) {
+    if (!item) { return ''; }
+    var ep = mediaInfoEpisode(item);
+    return (ep && ep.id) ? ep.id : (item.id || '');
+  }
+
+  function ensureMediaInfo(item, done) {
+    done = done || function () {};
+    if (!item) { return done(null); }
+    var key = mediaInfoKey(item);
+    if (!key) { return done(null); }
+    if (mediaInfoCache[key]) {
+      applySubtitleDefaults(mediaInfoCache[key]);
+      return done(mediaInfoCache[key]);
+    }
+    if (mediaInfoPending[key]) { mediaInfoPending[key].push(done); return; }
+    mediaInfoPending[key] = [done];
+
+    var ep = mediaInfoEpisode(item);
+    var params = { contentId: key };
+    if (ep && ep.id && item.id && ep.id !== item.id) { params.seriesContentId = item.id; }
+    portalServiceCall('mediaInfo', params, function (error, payload) {
+      var waiters = mediaInfoPending[key] || [];
+      delete mediaInfoPending[key];
+      var info = (!error && payload && payload.returnValue !== false) ? payload : null;
+      if (info) {
+        mediaInfoCache[key] = info;
+        applySubtitleDefaults(info);
+      }
+      for (var i = 0; i < waiters.length; i++) {
+        try { waiters[i](info); } catch (eWaiter) { /* ignore */ }
+      }
+    });
+  }
+
+  /* The portal lists audio PIDs in stream order ("por,spa,eng").  The real
+     app preselects Spanish when present, so do the same. */
+  function preferredAudioIndex(rawAudio) {
+    var parts = (rawAudio || '').split(/[,\/]/);
+    for (var i = 0; i < parts.length; i++) {
+      if (/^(spa|esp|es)$/i.test(parts[i].trim())) { return i; }
+    }
+    return 0;
+  }
+
+  function audioLanguageList(info) {
+    var out = [];
+    var parts = ((info && info.audio) || '').split(/[,\/]/);
+    for (var i = 0; i < parts.length; i++) {
+      var code = parts[i].trim();
+      if (!code) { continue; }
+      out.push({ index: i, code: code, label: formatAudioLang(code) });
+    }
+    return out;
+  }
+
+  function subtitleLanguageList(info) {
+    var out = [];
+    var subs = (info && info.subtitles) || [];
+    for (var i = 0; i < subs.length; i++) {
+      out.push({ lang: subs[i].lang, url: subs[i].url, format: subs[i].format });
+    }
+    /* The real dialog lists Español before Inglés for this catalog. */
+    out.sort(function (a, b) {
+      var pa = /^(es|spa|esp)$/i.test(a.lang || '') ? 0 : 1;
+      var pb = /^(es|spa|esp)$/i.test(b.lang || '') ? 0 : 1;
+      return pa - pb;
+    });
+    return out;
+  }
+
+  /* The real app opens with subtitles ON and Spanish selected when the portal
+     returns subtitle files. Keep the user's choice once they touch the switch
+     or pick a language. */
+  function applySubtitleDefaults(info) {
+    var list = subtitleLanguageList(info);
+    if (!vodSubChosen) {
+      if (!list.length) {
+        vodSubActive = false;
+        vodCurrentSubtitle = null;
+        loadSubtitleTrack(null);
+        return;
+      }
+      vodSubActive = true;
+      vodCurrentSubtitle = list[0];
+      loadSubtitleTrack(vodCurrentSubtitle);
+      return;
+    }
+    if (!vodSubActive) { return; }
+    if (!list.length) {
+      vodSubActive = false;
+      vodCurrentSubtitle = null;
+      loadSubtitleTrack(null);
+      return;
+    }
+    /* New episode with the same preference: keep the language if the new
+       episode ships it, otherwise fall back to the first file. */
+    var stillThere = false;
+    if (vodCurrentSubtitle) {
+      for (var i = 0; i < list.length; i++) {
+        if (list[i].url === vodCurrentSubtitle.url) {
+          vodCurrentSubtitle = list[i];
+          stillThere = true;
+          break;
+        }
+      }
+    }
+    if (!stillThere) {
+      vodCurrentSubtitle = list[0];
+      loadSubtitleTrack(vodCurrentSubtitle);
+    }
+  }
+
+  function qualityLabel(track) {
+    var q = String((track && track.quality) || '').trim().toUpperCase();
+    var h = track && track.height;
+    if (!q && h) { q = String(h) + 'P'; }
+    if (q === '4K' || q === '2160P' || q === 'UHD') { return '4K'; }
+    if (/^\d+$/.test(q)) { return q + 'P'; }
+    return q || 'AUTO';
+  }
+
   function schedulePlaySettingHide() {
     if (playSettingTimer) { clearTimeout(playSettingTimer); }
     playSettingTimer = setTimeout(function () {
@@ -2920,6 +3114,12 @@ function portalServiceCall(method, params, done) {
     renderPlaySettingView();
     playSettingView.classList.add('is-active');
     if (playerSubtitles) { playerSubtitles.classList.add('shift-up'); }
+
+    /* Audio languages, subtitle files and renditions come from the portal;
+       refresh the rows as soon as the service answers. */
+    ensureMediaInfo(state.playerItem, function () {
+      if (playSettingViewOpen) { renderPlaySettingView(); }
+    });
 
     schedulePlaySettingHide();
 
@@ -2944,8 +3144,79 @@ function portalServiceCall(method, params, done) {
 
   function renderPlaySettingView() {
     renderPlaySettingSelection();
+    renderPlaySettingAudio();
+    renderPlaySettingQuality();
     renderPlaySettingPlayerOptions();
     renderPlaySettingAspectOptions();
+    renderPlaySettingRowFocus();
+  }
+
+  function renderPlaySettingAudio() {
+    if (!psvSecAudio) { return; }
+    /* Always present: it is the entry point to "Ajuste de reproducir". */
+    psvSecAudio.classList.remove('is-hidden');
+  }
+
+  /* ud/n1.dd() builds the RESOLUCIÓN row from the portal's quality map and
+     shows shifted labels: the 720p copy is titled "1080P" and the 1080p copy
+     "4K". Mirror that so the row matches the real app. */
+  function qualityChoices(info) {
+    var tracks = (info && info.tracks) || [];
+    var out = [];
+    var seen = {};
+    for (var i = 0; i < tracks.length; i++) {
+      var raw = String(tracks[i].quality || '').toLowerCase().replace(/p$/, '');
+      var label = raw === '480' ? '480P'
+                : raw === '720' ? '1080P'
+                : raw === '1080' ? '4K'
+                : qualityLabel(tracks[i]);
+      if (seen[label]) { continue; }
+      seen[label] = true;
+      out.push({ label: label, trackIndex: i });
+    }
+    /* The APK adds a "4K" pill whenever the 720p copy is present and the
+       portal has no separate 1080p entry. */
+    if (seen['1080P'] && !seen['4K']) { out.push({ label: '4K', trackIndex: -1 }); }
+    return out;
+  }
+
+  function renderPlaySettingQuality() {
+    if (!psvQualityRow || !psvSecQuality) { return; }
+    var info = mediaInfoCache[mediaInfoKey(state.playerItem)];
+    var choices = qualityChoices(info);
+    clear(psvQualityRow);
+    for (var i = 0; i < choices.length; i++) {
+      (function (choice) {
+        var btn = el('button', 'psv-btn focusable');
+        btn.appendChild(el('span', 'psv-check', '✔'));
+        btn.appendChild(document.createTextNode(choice.label));
+        var selected = choice.trackIndex >= 0 && (state.trackIndex || 0) === choice.trackIndex;
+        if (selected) { btn.classList.add('is-selected'); }
+        btn._activate = function () {
+          if (selected) { schedulePlaySettingHide(); return; }
+          if (choice.trackIndex < 0) {
+            /* The portal exposes a single 720p copy for this title, so the
+               extra "4K" pill has no separate rendition to switch to. */
+            schedulePlaySettingHide();
+            return;
+          }
+          state.trackIndex = choice.trackIndex;
+          renderPlaySettingQuality();
+          restartCurrentPlayback();
+        };
+        psvQualityRow.appendChild(btn);
+      })(choices[i]);
+    }
+    psvSecQuality.classList.toggle('is-hidden', !choices.length);
+  }
+
+  /* The APK turns the title of the row that holds focus white and 40px. */
+  function renderPlaySettingRowFocus() {
+    if (!playSettingView) { return; }
+    var rows = playSettingView.querySelectorAll('.psv-row');
+    for (var i = 0; i < rows.length; i++) { rows[i].classList.remove('is-row-focused'); }
+    var row = state.focus ? closest(state.focus, '.psv-row') : null;
+    if (row) { row.classList.add('is-row-focused'); }
   }
 
   function renderPlaySettingSelection() {
@@ -3055,12 +3326,12 @@ function portalServiceCall(method, params, done) {
     if (psvBtnP1) {
       psvBtnP1.classList.toggle('is-selected', isRelay);
       var chk1 = psvBtnP1.querySelector('.psv-check');
-      if (chk1) chk1.style.display = isRelay ? 'inline' : 'none';
+      if (chk1) chk1.style.display = isRelay ? 'block' : 'none';
     }
     if (psvBtnP2) {
       psvBtnP2.classList.toggle('is-selected', !isRelay);
       var chk2 = psvBtnP2.querySelector('.psv-check');
-      if (chk2) chk2.style.display = !isRelay ? 'inline' : 'none';
+      if (chk2) chk2.style.display = !isRelay ? 'block' : 'none';
     }
   }
 
@@ -3072,7 +3343,7 @@ function portalServiceCall(method, params, done) {
       var isSel = (asp === playerCurrentAspect);
       btns[i].classList.toggle('is-selected', isSel);
       var chk = btns[i].querySelector('.psv-check');
-      if (chk) chk.style.display = isSel ? 'inline' : 'none';
+      if (chk) chk.style.display = isSel ? 'block' : 'none';
     }
   }
 
@@ -3085,17 +3356,27 @@ function portalServiceCall(method, params, done) {
     renderPlaySettingAspectOptions();
   }
 
-  function openPlaySettingsDialog() {
+  function openPlaySettingsDialog(fromItem) {
     if (!dialogPlaySettings) { buildPlayer(); }
     if (!dialogPlaySettings) return;
     if (playSettingTimer) { clearTimeout(playSettingTimer); playSettingTimer = null; }
     dialogPlaySettingsOpen = true;
+    dialogReturnFocus = state.focus;
+
+    var item = fromItem || playSettingsItem();
+    if (state.screen === 'detail') { item = state.detail || item; }
 
     renderDialogAudio();
     renderDialogSubtitle();
     applySubtitleStyles();
 
     dialogPlaySettings.classList.add('is-active');
+
+    ensureMediaInfo(item, function () {
+      if (!dialogPlaySettingsOpen) { return; }
+      renderDialogAudio();
+      renderDialogSubtitle();
+    });
 
     /* Focus first audio pill or switch */
     var firstFocus = (dpsAudioOptions && dpsAudioOptions.querySelector('.focusable')) || dpsSubSwitch || dpsBtnExit;
@@ -3108,40 +3389,36 @@ function portalServiceCall(method, params, done) {
     if (playSettingViewOpen) {
       if (psvBtnConfig) { setFocus(psvBtnConfig); }
       schedulePlaySettingHide();
-    } else {
-      if (state.screen === 'player') { setFocus(playerStage); }
+    } else if (dialogReturnFocus && isVisible(dialogReturnFocus)) {
+      setFocus(dialogReturnFocus);
+    } else if (state.screen === 'player') {
+      setFocus(playerStage);
     }
+    dialogReturnFocus = null;
   }
 
   function renderDialogAudio() {
     if (!dpsAudioOptions) return;
     clear(dpsAudioOptions);
-    var item = state.playerItem;
-    var tracks = [];
-    var raw = (item && item.streamAudioInfo) || '';
-    if (raw) {
-      var parts = raw.split(/[,\/]/);
-      for (var i = 0; i < parts.length; i++) {
-        var code = parts[i].trim();
-        tracks.push({ index: i, label: formatAudioLang(code) });
-      }
+
+    var info = mediaInfoCache[mediaInfoKey(playSettingsItem())];
+    if (info && !vodAudioChosen) {
+      vodCurrentAudioTrack = preferredAudioIndex(info.audio);
     }
+    var tracks = audioLanguageList(info);
     if (!tracks.length) {
-      tracks.push({ index: 0, label: 'Español' });
-      if (item && item.moreAudio) {
-        tracks.push({ index: 1, label: 'Inglés' });
-      }
+      /* mediaInfo has not answered yet: keep the current language visible. */
+      tracks = [{ index: vodCurrentAudioTrack || 0, label: 'Español' }];
     }
     for (var t = 0; t < tracks.length; t++) {
       (function (track) {
         var btn = el('button', 'dps-btn focusable');
         btn.textContent = track.label;
-        if (vodCurrentAudioTrack === track.index) {
-          btn.classList.add('is-selected');
-        }
+        if (vodCurrentAudioTrack === track.index) { btn.classList.add('is-selected'); }
         btn._activate = function () {
           switchAudioTrack(track.index);
           renderDialogAudio();
+          schedulePlaySettingHide();
         };
         dpsAudioOptions.appendChild(btn);
       })(tracks[t]);
@@ -3149,37 +3426,41 @@ function portalServiceCall(method, params, done) {
   }
 
   function renderDialogSubtitle() {
+    var info = mediaInfoCache[mediaInfoKey(playSettingsItem())];
+    var list = subtitleLanguageList(info);
+
     if (dpsSubSwitch) {
+      /* Without subtitle files there is nothing to switch on. */
+      var switchRow = dpsSubSwitch.parentNode;
+      if (switchRow) { switchRow.classList.toggle('is-hidden', !list.length); }
       dpsSubSwitch.classList.toggle('is-on', vodSubActive);
       var dotText = dpsSubSwitch.querySelector('.dps-switch-text');
       if (dotText) dotText.textContent = vodSubActive ? 'ON' : 'OFF';
     }
 
-    if (dpsRowLang) dpsRowLang.classList.toggle('is-visible', vodSubActive);
-    if (dpsRowSize) dpsRowSize.classList.toggle('is-visible', vodSubActive);
-    if (dpsRowStyle) dpsRowStyle.classList.toggle('is-visible', vodSubActive);
+    if (dpsRowLang) dpsRowLang.classList.toggle('is-visible', vodSubActive && list.length > 0);
+    if (dpsRowSize) dpsRowSize.classList.toggle('is-visible', vodSubActive && list.length > 0);
+    if (dpsRowStyle) dpsRowStyle.classList.toggle('is-visible', vodSubActive && list.length > 0);
 
     if (!vodSubActive) return;
 
     /* Render languages */
     if (dpsLangOptions) {
       clear(dpsLangOptions);
-      var item = state.playerItem;
-      var list = (item && item.subtitles) || [];
-      if (!list.length) {
-        list = [{ url: '', lang: 'Español' }];
-      }
       for (var s = 0; s < list.length; s++) {
         (function (sub) {
           var btn = el('button', 'dps-btn focusable');
-          btn.textContent = formatAudioLang(sub.lang || sub.language || 'Sub');
-          if (vodCurrentSubtitle && (vodCurrentSubtitle.url === sub.url || (!sub.url && s === 0))) {
+          btn.textContent = formatAudioLang(sub.lang || 'Sub');
+          if (vodCurrentSubtitle && vodCurrentSubtitle.url === sub.url) {
             btn.classList.add('is-selected');
           }
           btn._activate = function () {
             vodCurrentSubtitle = sub;
+            vodSubActive = true;
+            vodSubChosen = true;
             loadSubtitleTrack(sub);
             renderDialogSubtitle();
+            schedulePlaySettingHide();
           };
           dpsLangOptions.appendChild(btn);
         })(list[s]);
@@ -3206,26 +3487,36 @@ function portalServiceCall(method, params, done) {
   }
 
   function formatAudioLang(code) {
-    var c = (code || '').toLowerCase().trim();
-    if (/spa|esp|castellano|latino/.test(c)) return 'Español';
-    if (/eng|ing|en/.test(c)) return 'Inglés';
-    if (/jpn|jap|ja/.test(c)) return 'Japonés';
-    if (/kor|cor|ko/.test(c)) return 'Coreano';
-    if (/por|pt/.test(c)) return 'Portugués';
-    if (/fra|fr|franc/.test(c)) return 'Francés';
-    if (/ita|it/.test(c)) return 'Italiano';
-    if (/deu|ger|de/.test(c)) return 'Alemán';
-    if (/chi|zho|zh/.test(c)) return 'Chino';
+    var c = (code || '').toLowerCase().trim().split(/[-_]/)[0];
+    if (/^(spa|esp|es|castellano|latino)$/.test(c)) return 'Español';
+    if (/^(eng|ing|en)$/.test(c)) return 'Inglés';
+    if (/^(jpn|jap|ja)$/.test(c)) return 'Japonés';
+    if (/^(kor|cor|ko)$/.test(c)) return 'Coreano';
+    if (/^(por|pt)$/.test(c)) return 'Portugués';
+    if (/^(fra|fre|fr|franc)$/.test(c)) return 'Francés';
+    if (/^(ita|it)$/.test(c)) return 'Italiano';
+    if (/^(deu|ger|de)$/.test(c)) return 'Alemán';
+    if (/^(chi|zho|zh)$/.test(c)) return 'Chino';
     return c ? (c.charAt(0).toUpperCase() + c.slice(1)) : 'Pista';
   }
 
   function switchAudioTrack(trackIndex) {
     vodCurrentAudioTrack = trackIndex;
+    vodAudioChosen = true;
+    /* On the detail screen the choice is only remembered for the next play. */
+    if (state.screen !== 'player' || !playerVideo) { return; }
+    /* HTML5 cannot pick a PID inside a TS/MP4, so the FFmpeg relay maps it
+       with -map 0:a:<n>.  A direct stream has to move to the relay. */
     if (relayBaseUrl) {
-      var curSec = relayStartOffset + (playerVideo ? (playerVideo.currentTime || 0) : 0);
-      var newUrl = relayBaseUrl + '?start=' + Math.floor(curSec) + '&a=' + trackIndex;
-      playUrl(newUrl);
+      var curSec = relayStartOffset + (playerVideo.currentTime || 0);
+      playUrl(relayBaseUrl + '?start=' + Math.floor(curSec) + '&a=' + trackIndex);
+      return;
     }
+    if (state.streamMode !== 'relay' && state.streamMode !== 'smooth') {
+      state.streamMode = 'relay';
+      renderPlaySettingPlayerOptions();
+    }
+    restartCurrentPlayback();
   }
 
   function restartCurrentPlayback() {
@@ -3236,8 +3527,10 @@ function portalServiceCall(method, params, done) {
     setPlayerStatus('Cambiando reproductor…');
     resolvePlayerStream(item, function (url) {
       if (url) {
-        if (relayBaseUrl && curSec > 0) {
-          playUrl(relayBaseUrl + '?start=' + Math.floor(curSec) + (vodCurrentAudioTrack ? '&a=' + vodCurrentAudioTrack : ''));
+        if (url.indexOf(':8787/s/') !== -1) {
+          var seekUrl = url + '?start=' + Math.floor(curSec);
+          if (vodCurrentAudioTrack) { seekUrl += '&a=' + vodCurrentAudioTrack; }
+          playUrl(seekUrl);
         } else {
           playUrl(url);
           if (curSec > 0) {
@@ -3277,7 +3570,17 @@ function portalServiceCall(method, params, done) {
     psvBtnConfig = $('psv-btn-config');
     psvBtnP1 = $('psv-btn-p1');
     psvBtnP2 = $('psv-btn-p2');
+    psvSecAudio = $('psv-sec-audio');
+    psvSecQuality = $('psv-sec-quality');
+    psvQualityRow = $('psv-quality-row');
+    psvSecAspect = $('psv-sec-aspect');
+    psvSecPlayer = $('psv-sec-player');
+    psvBtnFeedback = $('psv-btn-feedback');
     psvAspectRow = $('psv-aspect-row');
+
+    if (psvBtnFeedback) {
+      psvBtnFeedback._activate = function () { schedulePlaySettingHide(); };
+    }
 
     if (psvBtnConfig) {
       psvBtnConfig._activate = function () {
@@ -3329,11 +3632,13 @@ function portalServiceCall(method, params, done) {
 
     if (dpsSubSwitch) {
       dpsSubSwitch._activate = function () {
+        vodSubChosen = true;
         vodSubActive = !vodSubActive;
         if (!vodSubActive) {
           loadSubtitleTrack(null);
         } else {
-          var subs = (state.playerItem && state.playerItem.subtitles) || [];
+          var info = mediaInfoCache[mediaInfoKey(playSettingsItem())];
+          var subs = subtitleLanguageList(info);
           if (!vodCurrentSubtitle && subs.length) {
             vodCurrentSubtitle = subs[0];
           }
@@ -3342,6 +3647,7 @@ function portalServiceCall(method, params, done) {
           }
         }
         renderDialogSubtitle();
+        schedulePlaySettingHide();
       };
     }
 
@@ -3565,12 +3871,10 @@ function portalServiceCall(method, params, done) {
     state.streamError = '';
     setPlayerStatus('');
     showOsdIcon('none');
-    closePlaySettingsDialog();
-    closePlaySettingView();
-    vodSubActive = false;
-    activeSubtitleCues = [];
-    vodCurrentSubtitle = null;
-    if (playerSubtitles) { playerSubtitles.innerHTML = ''; }
+    /* Keep the settings panel/dialog open across an audio/quality restart;
+       back() and screen changes close them. Keep the loaded cues too: an
+       audio/quality switch replaces the source but not the subtitles, and
+       showScreen() clears them when the player is really left. */
     /* Cancel any pending seek */
     if (seekTimer) { clearTimeout(seekTimer); seekTimer = null; seekPending = 0; }
     releaseRelaySeek();
@@ -3742,6 +4046,14 @@ function portalServiceCall(method, params, done) {
     function resolveNow() {
       var params = { contentId: item.id };
       params.playbackMode = state.streamMode;
+      params.trackIndex = state.trackIndex || 0;
+      /* Prefer the Spanish PID like the real app when mediaInfo already
+         answered; the relay maps it with ffmpeg -map 0:a:<n>. */
+      var cachedInfo = mediaInfoCache[mediaInfoKey(item)];
+      if (cachedInfo && !vodAudioChosen) {
+        vodCurrentAudioTrack = preferredAudioIndex(cachedInfo.audio);
+      }
+      params.audioTrack = vodCurrentAudioTrack || 0;
       if (isSeriesItem(item)) {
         var ep = state.playerEpisode;
         if (ep && ep.id) {
@@ -3797,6 +4109,9 @@ function portalServiceCall(method, params, done) {
     stopPlayerVideo();
     var it = item || state.playerItem;
     if (!it) { return; }
+    /* Fetch real audio/subtitle tracks so the first Down press already has
+       the languages and renditions instead of guessing them. */
+    ensureMediaInfo(it);
     if (it._portal) {
       setPlayerStatus('Preparando la reproducción…');
       resolvePlayerStream(it, function (url) {
@@ -3812,6 +4127,7 @@ function portalServiceCall(method, params, done) {
   function expandToFullscreen(item, episode) {
     if (!playerStage) { buildPlayer(); }
     state.playerMode = 'vod';
+    if (item && state.playerItem !== item) { resetMediaSelection(); }
     if (item) { state.playerItem = item; }
     if (episode) { state.playerEpisode = episode; }
     state.playerReturn = { screen: 'detail', focus: state.focus };
@@ -3843,6 +4159,7 @@ function portalServiceCall(method, params, done) {
     }
     if (!playerStage) { buildPlayer(); }
     state.playerMode = mode;
+    if (item && state.playerItem !== item) { resetMediaSelection(); }
     state.playerItem = item || null;
     state.playerEpisode = episode || null;
     state.playerReturn = { screen: state.screen, focus: state.focus };

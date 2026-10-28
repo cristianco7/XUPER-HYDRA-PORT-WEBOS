@@ -99,10 +99,25 @@ service.register('detail', function (message) {
   magis.detail(id, function (err, data) { respond(message, err, data); });
 });
 
-/* resolve({contentId, seriesContentId}) -> { url, proxyPath, headers, ... } */
+/* Subtitle files live on a CDN without CORS headers, so the page cannot read
+ * them directly.  Rewrite every subtitle URL to a loopback proxy URL. */
+function attachSubtitles(payload) {
+  if (!payload || !payload.subtitles || !payload.subtitles.length) { return payload; }
+  payload.subtitles = payload.subtitles.map(function (sub) {
+    return {
+      lang: sub.lang,
+      format: sub.format,
+      url: proxy.addSubtitle(sub.url)
+    };
+  });
+  return payload;
+}
+
+/* resolve({contentId, seriesContentId, playbackMode, trackIndex}) */
 service.register('resolve', function (message) {
   var payload = message.payload || {};
-  magis.resolve(payload.contentId, payload.seriesContentId, function (err, stream) {
+  var options = { trackIndex: payload.trackIndex };
+  magis.resolve(payload.contentId, payload.seriesContentId, options, function (err, stream) {
     if (err) { return fail(message, err); }
 
     var isHevc = (stream.codec === 'HEVC' || stream.codec === 'H265' || stream.codec === 'H.265');
@@ -113,13 +128,16 @@ service.register('resolve', function (message) {
        the light direct proxy so they retain native seeking; remux only the
        HEVC streams whose native TS path visibly judders on this TV. */
     if (relay.available() && isHevc && useSmoothMode) {
-      var relayUrl = relay.register(stream, { hevc: isHevc, audio: 0 });
+      var relayUrl = relay.register(stream, { hevc: isHevc, audio: Number(payload.audioTrack) || 0 });
       console.log('[xuper-service] routing stream via ffmpeg relay: ' + relayUrl);
       stream.proxyPath = relayUrl;
       stream.mime = 'video/mp4';
       stream.isRelay = true;
       stream.isHls = false;
-      return respond(message, null, stream);
+      proxy.start(function () { /* the relay needs no media proxy; subtitles do */
+        respond(message, null, attachSubtitles(stream));
+      });
+      return;
     }
 
     proxy.start(function (perr, port) {
@@ -132,7 +150,22 @@ service.register('resolve', function (message) {
          the service's memory bounded. */
       stream.proxyPath = proxy.baseUrl() + '/media/' + token + '/stream.' + extension;
       stream.isHls = false;
+      attachSubtitles(stream);
       respond(message, null, stream);
+    });
+  });
+});
+
+/* mediaInfo({contentId, seriesContentId}) -> { audio, subtitles, tracks }
+ * Audio languages and subtitle files for the in-player dialog.  It runs
+ * before playback and returns no playable URL, license or headers. */
+service.register('mediaInfo', function (message) {
+  var payload = message.payload || {};
+  magis.mediaInfo(payload.contentId, payload.seriesContentId, function (err, info) {
+    if (err) { return fail(message, err); }
+    proxy.start(function (perr) {
+      if (perr) { return fail(message, perr); }
+      respond(message, null, attachSubtitles(info));
     });
   });
 });

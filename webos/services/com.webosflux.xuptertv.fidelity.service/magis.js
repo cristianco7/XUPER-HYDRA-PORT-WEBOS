@@ -690,7 +690,37 @@ function mediaScore(track) {
   return score;
 }
 
-function resolve(contentId, seriesId, done) {
+function collectTracks(episode) {
+  var tracks = [];
+  var totals = (episode && episode.totalMovieList) || [];
+  for (var t = 0; t < totals.length; t++) {
+    var movies = (totals[t] && totals[t].movieList) || [];
+    for (var m = 0; m < movies.length; m++) {
+      if (movies[m] && trim(movies[m].contentId)) { tracks.push(movies[m]); }
+    }
+  }
+  tracks.sort(function (a, b) { return mediaScore(a) - mediaScore(b); });
+  return tracks;
+}
+
+function subtitleList(episode) {
+  var out = [];
+  var subs = (episode && episode.subtitleList) || [];
+  for (var s = 0; s < subs.length && out.length < 30; s++) {
+    var file = subs[s] && subs[s].file && subs[s].file[0];
+    if (!file || !trim(file.url)) { continue; }
+    out.push({
+      lang: trim(subs[s].language),
+      url: trim(file.url),
+      format: trim(file.fileType) || 'srt'
+    });
+  }
+  return out;
+}
+
+/* Shared startPlayVOD step: both the playback resolver and the media-info
+ * call need the same episode/track list. */
+function loadPlay(contentId, seriesId, done) {
   var id = trim(contentId);
   if (!id) { return done(new Error('falta contentId')); }
   ensureSession(function (err) {
@@ -703,68 +733,81 @@ function resolve(contentId, seriesId, done) {
       if (err2) { return done(err2); }
       var episode = play && play.episodeList && play.episodeList[0];
       if (!episode) { return done(new Error('el portal no devolvió pistas de vídeo')); }
-      var tracks = [];
-      var totals = episode.totalMovieList || [];
-      for (var t = 0; t < totals.length; t++) {
-        var movies = (totals[t] && totals[t].movieList) || [];
-        for (var m = 0; m < movies.length; m++) {
-          if (movies[m] && trim(movies[m].contentId)) { tracks.push(movies[m]); }
-        }
-      }
+      var tracks = collectTracks(episode);
       if (!tracks.length) { return done(new Error('el portal no devolvió pistas de vídeo')); }
-      tracks.sort(function (a, b) { return mediaScore(a) - mediaScore(b); });
-      var track = tracks[0];
-      /* Playback diagnostics deliberately contain only rendition metadata.
-         They let us distinguish a TS-only title from a bad selector without
-         exposing a playable URL, license, or request headers to the page. */
-      var availableTracks = [];
-      for (var a = 0; a < tracks.length; a++) {
-        availableTracks.push(trackSummary(tracks[a]));
-      }
-      var license = trim((track.licenseList && track.licenseList[0] && track.licenseList[0].license) || '');
-      if (!license) { return done(new Error('el portal no devolvió licencia de reproducción')); }
+      done(null, { play: play, episode: episode, tracks: tracks });
+    });
+  });
+}
 
-      getSlb(function (err3, slb) {
-        if (err3) { return done(err3); }
-        var cdns = vodCdns(slb);
-        if (!cdns.length) { return done(new Error('el portal no expuso CDN de vod libre')); }
-        var cdn = cdns[0];
-        var ext = trim(track.videoFormat).toLowerCase() === 'ts' ? 'ts' : 'mp4';
-        var url = cdn.bases[0] + '/vod/' + trim(track.contentId) + '_media.' + ext;
+/* Language list and subtitle files for the audio/subtitle dialog.  It
+ * deliberately exposes no playable URL, license or request headers, so the
+ * page can call it from the detail screen before playback starts. */
+function mediaInfo(contentId, seriesId, done) {
+  loadPlay(contentId, seriesId, function (err, info) {
+    if (err) { return done(err); }
+    var track = info.tracks[0];
+    done(null, {
+      name: text(info.play && info.play.name),
+      audio: trim(track.audioInfo),
+      subtitles: subtitleList(info.episode),
+      tracks: info.tracks.map(trackSummary),
+      selected: trackSummary(track),
+      duration: durationSeconds(track.duration || info.episode.duration || (info.play && info.play.duration))
+    });
+  });
+}
 
-        var subtitles = [];
-        var subs = episode.subtitleList || [];
-        for (var s = 0; s < subs.length && subtitles.length < 30; s++) {
-          var file = subs[s] && subs[s].file && subs[s].file[0];
-          if (!file || !trim(file.url)) { continue; }
-          subtitles.push({
-            lang: trim(subs[s].language),
-            url: trim(file.url),
-            format: trim(file.fileType) || 'srt'
-          });
-        }
+function resolve(contentId, seriesId, options, done) {
+  if (typeof options === 'function') { done = options; options = {}; }
+  options = options || {};
+  loadPlay(contentId, seriesId, function (err, info) {
+    if (err) { return done(err); }
+    var play = info.play;
+    var episode = info.episode;
+    var tracks = info.tracks;
+    var index = parseInt(options.trackIndex, 10);
+    if (!(index >= 0 && index < tracks.length)) { index = 0; }
+    var track = tracks[index];
+    /* Playback diagnostics deliberately contain only rendition metadata.
+       They let us distinguish a TS-only title from a bad selector without
+       exposing a playable URL, license, or request headers to the page. */
+    var availableTracks = [];
+    for (var a = 0; a < tracks.length; a++) {
+      availableTracks.push(trackSummary(tracks[a]));
+    }
+    var license = trim((track.licenseList && track.licenseList[0] && track.licenseList[0].license) || '');
+    if (!license) { return done(new Error('el portal no devolvió licencia de reproducción')); }
 
-        var mime = ext === 'ts' ? 'video/mp2t' : 'video/mp4';
-        var codec = trim(track.encodeFormat).toUpperCase();
-        done(null, {
-          url: url,
-          mime: mime,
-          codec: codec,
-          quality: trim(track.quality),
-          duration: durationSeconds(track.duration || episode.duration || (play && play.duration)),
-          selectedTrack: trackSummary(track),
-          availableTracks: availableTracks,
-          audio: trim(track.audioInfo),
-          headers: {
-            'Content-Auth': cdn.auth,
-            'Content-License': license,
-            'User-Agent': UA_CDN,
-            App: APP_ID,
-            'App-Version': APK_VERSION
-          },
-          subtitles: subtitles,
-          name: text(play && play.name)
-        });
+    getSlb(function (err3, slb) {
+      if (err3) { return done(err3); }
+      var cdns = vodCdns(slb);
+      if (!cdns.length) { return done(new Error('el portal no expuso CDN de vod libre')); }
+      var cdn = cdns[0];
+      var ext = trim(track.videoFormat).toLowerCase() === 'ts' ? 'ts' : 'mp4';
+      var url = cdn.bases[0] + '/vod/' + trim(track.contentId) + '_media.' + ext;
+
+      var mime = ext === 'ts' ? 'video/mp2t' : 'video/mp4';
+      var codec = trim(track.encodeFormat).toUpperCase();
+      done(null, {
+        url: url,
+        mime: mime,
+        codec: codec,
+        quality: trim(track.quality),
+        duration: durationSeconds(track.duration || episode.duration || (play && play.duration)),
+        selectedTrack: trackSummary(track),
+        availableTracks: availableTracks,
+        trackIndex: index,
+        audio: trim(track.audioInfo),
+        headers: {
+          'Content-Auth': cdn.auth,
+          'Content-License': license,
+          'User-Agent': UA_CDN,
+          App: APP_ID,
+          'App-Version': APK_VERSION
+        },
+        subtitles: subtitleList(episode),
+        name: text(play && play.name)
       });
     });
   });
@@ -774,6 +817,7 @@ module.exports = {
   home: home,
   search: search,
   detail: detail,
+  mediaInfo: mediaInfo,
   resolve: resolve,
   ensureSession: ensureSession,
   session: session,

@@ -60,6 +60,27 @@ contiene este código. Ver `AUDITORIA_IPK.md`.
 - **Catálogo**: pipeline completo con muestra local y adaptador para backend
   autorizado.
 
+## Panel del reproductor y "Ajuste de reproducir"
+
+El panel que abre la tecla **Abajo** dentro del reproductor y el diálogo
+**Ajuste de reproducir** (también accesible desde `Idioma` en el detalle) se
+construyen con los datos reales del portal, no con una maqueta:
+
+- `mediaInfo` del servicio llama a `v10/startPlayVOD` + `v14/getSlbInfo` y
+  devuelve `audio` (lista de idiomas del TS), `subtitles` (archivos reales),
+  `tracks` (rendiciones) y `moreAudio`/`moreSubtitle`.
+- El panel muestra IDIOMA (`Configuración`), RESOLUCIÓN, FORMATO DE PANTALLA,
+  OPCIONES DE REPRODUCTOR y FEEDBACK; las filas sin datos se ocultan.
+- RESOLUCIÓN replica el mapeo de `ud/n1.dd()`: `480p`→`480P`, `720p`→`1080P`,
+  `1080p`→`4K`, con el pill `4K` sintético cuando solo existe la copia 720p.
+- El diálogo abre con subtítulos **ON** y Español seleccionado cuando el portal
+  devuelve archivos (comportamiento observado en la app real); la elección del
+  usuario se conserva (`vodSubChosen`).
+- Cambiar de idioma de audio obliga a pasar por el relay FFmpeg (`&a=<índice>`),
+  porque HTML5 no puede seleccionar PIDs de audio dentro de un TS.
+- Los subtítulos se descargan a través del proxy local (`/sub/<token>.srt`),
+  ya que el CDN no envía cabeceras CORS.
+
 ## Fidelidad
 
 - Geometría derivada de los layouts con la regla AutoLayout
@@ -68,8 +89,11 @@ contiene este código. Ver `AUDITORIA_IPK.md`.
   (`INVENTARIO_RECURSOS.md`).
 - Medición real en navegador y comparación documentada en
   `COMPARACION_VISUAL.md`.
-- **No** hay comparación píxel a píxel contra capturas de Android TV: no se
-  afirma 100 % de fidelidad.
+- Diálogo y panel medidos contra capturas reales de Android TV (WSA
+  1920×1080): caja 1145×775 en y=126, filas en y=281/406/482/592/702 y panel
+  con paso de fila de 149 px.
+- **No** hay comparación píxel a píxel de toda la app: no se afirma 100 % de
+  fidelidad.
 - Las piezas dinámicas (logo, iconos de pestaña, pósteres, QR, logos de canal)
   usan placeholder original o quedan pendientes; no se inventan.
 
@@ -79,20 +103,20 @@ Ver `DIFERENCIAS_PENDIENTES.md`. Lo principal:
 
 - barra VOD `MFInfoBar`,
 - marquesina de botones del detalle,
-- episodios de series,
+- canales reales de la pestaña TV (`v6/getLiveData`),
+- logos de marca de la franja inferior de EXPLORAR,
+- diálogo de FEEDBACK del reproductor,
 - paneles Account/Purchase,
 - flujo de contraseña parental,
-- `LiveFreeActivity` como pantalla propia,
-- pruebas en el televisor,
-- referencia visual de Android TV.
+- `LiveFreeActivity` como pantalla propia.
 
 ## Empaquetado
 
-Build 1.4.1 (app + servicio, con FFmpeg dentro del IPK):
+Build 1.4.5 (app + servicio, con FFmpeg dentro del IPK):
 
 ```
-dist/com.webosflux.xuptertv.fidelity_1.4.1_all.ipk   22 429 678 B
-SHA-256 EB24581DA813684E12B4C7769EA3F6B475E153E61DEF98E8A523C8E382A8D430
+dist/com.webosflux.xuptertv.fidelity_1.4.5_all.ipk   22 437 282 B
+SHA-256 A66F23CE2CDA046817AF902DA303A44FC6DA1C5E13575FF4CA826EBAABEDAD78
 ```
 
 ```powershell
@@ -115,11 +139,16 @@ powershell -ExecutionPolicy Bypass -File tools/setup-ffmpeg.ps1
 `build-ipk.ps1` lo llama solo si falta. SHA-256 del binario:
 `0AFBA4A11110E6E402053E0FC14C33A7EB207D7A588688AE87DBA471A0F06C71`.
 
+> Los JSON de `appinfo.json` y del servicio deben guardarse **sin BOM**: el
+> Node 0.12 del televisor falla con `Unexpected token` y el servicio no
+> arranca. `Set-Content -Encoding UTF8` de PowerShell 5.1 añade BOM; usar
+> `UTF8Encoding($false)`.
+
 Instalación en la TV de pruebas (`ares-install` falla en este equipo tras la
 subida; el servicio Luna sí instala):
 
 ```powershell
-node tools\tv_deploy.mjs dist\com.webosflux.xuptertv.fidelity_1.4.1_all.ipk
+node tools\tv_deploy.mjs dist\com.webosflux.xuptertv.fidelity_1.4.5_all.ipk
 ```
 
 Contiene la app completa (`config/`, `data/`, `assets/original/` y

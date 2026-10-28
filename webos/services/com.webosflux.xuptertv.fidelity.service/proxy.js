@@ -19,6 +19,11 @@ var tsIndexer = require('./ts-indexer');
 var MAX_TOKENS = 6;
 var tokens = {};      // token -> { url, headers, at }
 var order = [];
+/* Subtitle files are small text downloads that must not disturb the active
+ * media stream, so they get their own token table and route. */
+var subtitleTokens = {};
+var subtitleOrder = [];
+var MAX_SUBTITLES = 12;
 var server = null;
 var port = 0;
 
@@ -76,6 +81,64 @@ function add(target, headers, duration) {
     at: Date.now()
   });
   return token;
+}
+
+/* Registers a subtitle URL and returns a loopback URL the page can XHR.
+ * The page cannot read the CDN directly (no Access-Control-Allow-Origin). */
+function addSubtitle(target) {
+  var token = crypto.randomBytes(12).toString('hex');
+  subtitleTokens[token] = { url: target, at: Date.now() };
+  subtitleOrder.push(token);
+  while (subtitleOrder.length > MAX_SUBTITLES) {
+    var old = subtitleOrder.shift();
+    if (old) { delete subtitleTokens[old]; }
+  }
+  return baseUrl() + '/sub/' + token + '.srt';
+}
+
+function sendSubtitle(req, res, entry) {
+  var parsed = urlmod.parse(entry.url || '');
+  var secure = parsed.protocol === 'https:';
+  var options = {
+    hostname: parsed.hostname,
+    servername: parsed.hostname,
+    rejectUnauthorized: false,
+    port: parsed.port || (secure ? 443 : 80),
+    path: parsed.path,
+    method: 'GET',
+    headers: {
+      'User-Agent': 'Ranger/4.9.4-17294ac0',
+      'Accept': '*/*'
+    },
+    agent: secure ? httpsAgent : httpAgent
+  };
+  var failed = false;
+  var upstream = (secure ? https : http).request(options, function (up) {
+    var parts = [];
+    up.on('data', function (chunk) { parts.push(chunk); });
+    up.on('end', function () {
+      if (failed) { return; }
+      var body = Buffer.concat(parts);
+      var ok = up.statusCode >= 200 && up.statusCode < 300;
+      res.writeHead(ok ? 200 : 502, {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Content-Length': body.length,
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'private, max-age=300'
+      });
+      res.end(body);
+    });
+  });
+  upstream.setTimeout(20000, function () { try { upstream.abort(); } catch (eAbort) { /* ignore */ } });
+  upstream.on('error', function () {
+    if (failed) { return; }
+    failed = true;
+    try {
+      res.writeHead(502, { 'Content-Type': 'text/plain', 'Access-Control-Allow-Origin': '*' });
+      res.end('subtitle upstream error');
+    } catch (e502) { /* ignore */ }
+  });
+  upstream.end();
 }
 
 function mediaRequest(entry, method, extraHeaders) {
@@ -299,6 +362,17 @@ function handler(req, res) {
     res.end('aborted');
     return;
   }
+  var sub = /^\/sub\/([a-f0-9]{24})\.srt$/.exec(req.url || '');
+  if (sub) {
+    var subEntry = subtitleTokens[sub[1]];
+    if (!subEntry) {
+      res.writeHead(410, { 'Content-Type': 'text/plain', 'Access-Control-Allow-Origin': '*' });
+      res.end('expired');
+      return;
+    }
+    sendSubtitle(req, res, subEntry);
+    return;
+  }
   var m = /^\/media\/([a-f0-9]{24})(?:\/([^\?#]*))?(?:[?#].*)?$/.exec(req.url || '');
   if (!m) {
     res.writeHead(404, { 'Content-Type': 'text/plain', 'Access-Control-Allow-Origin': '*' });
@@ -341,6 +415,7 @@ function baseUrl() {
 module.exports = {
   start: start,
   add: add,
+  addSubtitle: addSubtitle,
   baseUrl: baseUrl,
   port: function () { return port; },
   killActiveStreams: killActiveStreams
