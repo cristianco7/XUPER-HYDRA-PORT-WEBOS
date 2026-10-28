@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920, height=1080">
+<title>Xuper Hydra</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ============================================================
+       WELCOME  (activity_welcome.xml + welcome_style)
+       design_width 1920 / design_width_in_dp 1280  ->  1dp = 1.5px
+       ============================================================ -->
+  <section id="screen-welcome" class="screen is-active">
+    <div class="welcome-name">Xuper Hydra</div>
+    <div class="welcome-version">v4.99.2</div>
+    <div class="welcome-loading"><img id="welcome-loading-img" alt="" src="assets/original/welcome/img_welcome_loading1.png"></div>
+  </section>
+
+  <!-- ============================================================
+       HOME  (activity_home.xml)
+       ============================================================ -->
+  <section id="screen-home" class="screen">
+    <div id="home-pages" class="home-pages"></div>
+    <div class="home-sidebar-bg"></div>
+    <div id="home-tabs" class="home-tabs"></div>
+    <div id="home-notify" class="home-notify"></div>
+  </section>
+
+  <!-- ============================================================
+       VOD DETAILS  (activity_voddetails.xml)
+       ============================================================ -->
+  <section id="screen-detail" class="screen">
+    <div class="detail-left" id="detail-left"></div>
+    <div class="detail-player" id="detail-player"></div>
+    <div class="detail-buttons" id="detail-buttons"></div>
+    <div class="detail-bottom" id="detail-bottom"></div>
+  </section>
+
+  <!-- ============================================================
+       SEARCH  (activity_vodsearch.xml)
+       ============================================================ -->
+  <section id="screen-search" class="screen">
+    <div class="search-keyboard" id="search-keyboard"></div>
+    <div class="search-hot" id="search-hot">
+      <div class="search-hot-title">Búsqueda popular</div>
+      <div class="search-hot-refresh">Actualizar</div>
+      <div class="search-hot-total">Total: <span>10</span></div>
+      <div class="search-grid" id="search-hot-grid"></div>
+    </div>
+    <div class="search-results" id="search-results">
+      <div class="search-nav" id="search-nav"></div>
+      <div class="search-grid" id="search-result-grid"></div>
+      <div class="search-empty" id="search-empty">
+        <div class="search-empty-title">No hay resultados</div>
+        <div class="search-empty-hint h1">1. Intente nuevamente usando el nombre de la película, serie, director o actor para obtener un resultado más preciso.</div>
+        <div class="search-empty-hint h2">2. Para buscar canales en vivo, vaya a canales en vivo en modo de pantalla completa</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       SETTINGS  (activity_setting.xml)
+       ============================================================ -->
+  <section id="screen-settings" class="screen">
+    <div class="settings-menu" id="settings-menu"></div>
+    <div class="settings-right" id="settings-right"></div>
+  </section>
+
+  <!-- ============================================================
+       FULLSCREEN LIVE PLAYER  (layout_live_infobar.xml + frag_live_channel.xml)
+       ============================================================ -->
+  <section id="screen-player" class="screen">
+    <div class="player-stage" id="player-stage">
+      <div class="player-frame"></div>
+      <!-- Starfish honours preload="none" very aggressively: it starts VOD
+           with almost no decoded reserve, which makes a local authenticated
+           proxy look like it is stuttering.  Keep a normal media buffer. -->
+      <video id="player-video" class="player-video" preload="auto" playsinline webkit-playsinline></video>
+      <div class="player-status" id="player-status"></div>
+      <div class="player-osd-icon" id="player-osd-icon"></div>
+    </div>
+    <!-- Live TV InfoBar -->
+    <div class="player-infobar" id="player-infobar"></div>
+    <!-- VOD InfoBar (from XuperTV layout_mf_infobar.xml) -->
+    <div class="player-vod-infobar" id="player-vod-infobar">
+      <img class="vod-infobar-poster" id="vod-infobar-poster" alt="" src="assets/original/common/bg_placehoder_vertical.png">
+      <div class="vod-infobar-content">
+        <div class="vod-seekbar-row">
+          <span class="vod-time-current" id="vod-time-current">00:00:00</span>
+          <div class="vod-seekbar" id="vod-seekbar">
+            <div class="vod-seek-buffered" id="vod-seek-buffered"></div>
+            <div class="vod-seek-progress" id="vod-seek-progress"></div>
+            <div class="vod-seek-thumb" id="vod-seek-thumb"></div>
+          </div>
+          <span class="vod-time-total" id="vod-time-total">00:00:00</span>
+        </div>
+        <div class="vod-bottom-row">
+          <div class="vod-infobar-title" id="vod-infobar-title"></div>
+          <div class="vod-infobar-tips">
+            <div class="vod-tip"><img src="assets/original/common/icon_info_exit.png" alt=""><span>Salir</span></div>
+            <div class="vod-tip"><img src="assets/original/common/icon_info_ok.png" alt=""><span>Pausa/Play</span></div>
+            <div class="vod-tip"><img src="assets/original/common/icon_info_back.png" alt=""><span>-10s</span></div>
+            <div class="vod-tip"><img src="assets/original/common/icon_info_fast.png" alt=""><span>+10s</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="player-channels" id="player-channels"></div>
+  </section>
+
+</div>
+<!-- webOS TV bridge for Luna service communication -->
+<script src="js/webOSTV.js"></script>
+<!-- Real Magis portal catalog snapshot (anonymous session, generated at
+     build time). Provides an instant first paint with the real catalog. -->
+<script src="data/portal.js"></script>
+<!-- Bundled sample catalog (open movies). Replace it or point
+     config/api.js at an authorized backend to load your own VOD catalog. -->
+<script src="data/catalog.js"></script>
+<!-- Local, authorized VOD endpoint configuration.  Keep this file before app.js. -->
+<script src="config/api.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

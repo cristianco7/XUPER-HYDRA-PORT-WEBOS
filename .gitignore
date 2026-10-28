@@ -1,0 +1,24 @@
+# Build artifacts
+dist/
+scratch/
+shots/
+
+# Packaged installers and compiled helpers
+*.ipk
+*.class
+
+# Local media fixtures used while diagnosing HEVC/TS playback
+*.ts
+*.mp4
+
+# Extracted APK analysis (293 MB, reproducible from the documented APK hash)
+analysis/
+
+# Platform binary restored by tools/setup-ffmpeg.ps1
+webos/services/com.webosflux.xuptertv.fidelity.service/ffmpeg
+
+# OS / editor noise
+Thumbs.db
+desktop.ini
+.DS_Store
+*.swp
