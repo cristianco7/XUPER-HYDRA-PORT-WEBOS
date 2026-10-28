@@ -1785,6 +1785,7 @@ function portalServiceCall(method, params, done) {
     /* New title: forget the previous audio/subtitle/rendition choice and ask
        the portal for this one's real tracks (cached for the dialog/panel). */
     resetMediaSelection();
+    restoreSmoothMode(item);
     ensureMediaInfo(item);
 
     buildDetail(item);
@@ -1949,7 +1950,7 @@ function portalServiceCall(method, params, done) {
     var modeLabel = el('span', null, state.streamMode === 'smooth' ? 'Modo fluido: Sí' : 'Modo fluido: No');
     modeBtn.appendChild(modeLabel);
     modeBtn._activate = function () {
-      state.streamMode = state.streamMode === 'smooth' ? 'normal' : 'smooth';
+      setSmoothMode(item, state.streamMode !== 'smooth');
       modeLabel.textContent = state.streamMode === 'smooth' ? 'Modo fluido: Sí' : 'Modo fluido: No';
     };
     detailButtons.appendChild(modeBtn);
@@ -2952,6 +2953,27 @@ function portalServiceCall(method, params, done) {
     return state.playerItem || state.detail || null;
   }
 
+  /* "Modo fluido" is a per-title preference: turning it on for one movie must
+     not leak into the next one, while a series keeps it across its episodes
+     (same series id). */
+  var smoothModeByTitle = {};
+
+  function smoothModeKey(item) {
+    if (!item) { return ''; }
+    return item.seriesId || item.id || '';
+  }
+
+  function restoreSmoothMode(item) {
+    var key = smoothModeKey(item);
+    state.streamMode = smoothModeByTitle[key] ? 'smooth' : 'normal';
+  }
+
+  function setSmoothMode(item, on) {
+    var key = smoothModeKey(item);
+    state.streamMode = on ? 'smooth' : 'normal';
+    if (key) { smoothModeByTitle[key] = !!on; }
+  }
+
   /* Called when a different title is opened, never when zapping episodes. */
   function resetMediaSelection() {
     vodCurrentAudioTrack = 0;
@@ -3589,20 +3611,18 @@ function portalServiceCall(method, params, done) {
     }
     if (psvBtnP1) {
       psvBtnP1._activate = function () {
-        if (state.streamMode !== 'relay') {
-          state.streamMode = 'relay';
-          renderPlaySettingPlayerOptions();
-          restartCurrentPlayback();
-        }
+        if (state.streamMode === 'relay' || state.streamMode === 'smooth') { return; }
+        setSmoothMode(playSettingsItem(), true);
+        renderPlaySettingPlayerOptions();
+        restartCurrentPlayback();
       };
     }
     if (psvBtnP2) {
       psvBtnP2._activate = function () {
-        if (state.streamMode !== 'direct') {
-          state.streamMode = 'direct';
-          renderPlaySettingPlayerOptions();
-          restartCurrentPlayback();
-        }
+        if (state.streamMode !== 'relay' && state.streamMode !== 'smooth') { return; }
+        setSmoothMode(playSettingsItem(), false);
+        renderPlaySettingPlayerOptions();
+        restartCurrentPlayback();
       };
     }
     if (psvAspectRow) {
@@ -4130,6 +4150,7 @@ function portalServiceCall(method, params, done) {
     if (item && state.playerItem !== item) { resetMediaSelection(); }
     if (item) { state.playerItem = item; }
     if (episode) { state.playerEpisode = episode; }
+    if (item) { restoreSmoothMode(item); }
     state.playerReturn = { screen: 'detail', focus: state.focus };
 
     var scrPlayer = $('screen-player');
@@ -4162,6 +4183,7 @@ function portalServiceCall(method, params, done) {
     if (item && state.playerItem !== item) { resetMediaSelection(); }
     state.playerItem = item || null;
     state.playerEpisode = episode || null;
+    if (mode === 'vod' && item) { restoreSmoothMode(item); }
     state.playerReturn = { screen: state.screen, focus: state.focus };
     state.channelsOpen = false;
     playerInfo.classList.remove('is-active');

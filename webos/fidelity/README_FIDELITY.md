@@ -78,6 +78,9 @@ construyen con los datos reales del portal, no con una maqueta:
   usuario se conserva (`vodSubChosen`).
 - Cambiar de idioma de audio obliga a pasar por el relay FFmpeg (`&a=<índice>`),
   porque HTML5 no puede seleccionar PIDs de audio dentro de un TS.
+- **Modo fluido** es una preferencia por título: activarlo en una película no
+  se hereda al abrir otra; una serie conserva el valor entre sus episodios
+  (misma clave de serie).
 - Los subtítulos se descargan a través del proxy local (`/sub/<token>.srt`),
   ya que el CDN no envía cabeceras CORS.
 
@@ -112,12 +115,15 @@ Ver `DIFERENCIAS_PENDIENTES.md`. Lo principal:
 
 ## Empaquetado
 
-Build 1.4.5 (app + servicio, con FFmpeg dentro del IPK):
+Build 1.4.6 (app + servicio, con FFmpeg dentro del IPK):
 
 ```
-dist/com.webosflux.xuptertv.fidelity_1.4.5_all.ipk   22 437 282 B
-SHA-256 A66F23CE2CDA046817AF902DA303A44FC6DA1C5E13575FF4CA826EBAABEDAD78
+dist/com.webosflux.xuptertv.fidelity_1.4.6_all.ipk   22 437 328 B
+SHA-256 F4FB925770BEF311E643A335B8140EB66635200EB3320A7E2C95465128DC9084
 ```
+
+1.4.6: «Modo fluido» pasa a ser una preferencia **por título**. Activarlo en
+una película no se hereda al abrir otra; una serie lo conserva entre episodios.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools/build-ipk.ps1
@@ -148,7 +154,7 @@ Instalación en la TV de pruebas (`ares-install` falla en este equipo tras la
 subida; el servicio Luna sí instala):
 
 ```powershell
-node tools\tv_deploy.mjs dist\com.webosflux.xuptertv.fidelity_1.4.5_all.ipk
+node tools\tv_deploy.mjs dist\com.webosflux.xuptertv.fidelity_1.4.6_all.ipk
 ```
 
 Contiene la app completa (`config/`, `data/`, `assets/original/` y
