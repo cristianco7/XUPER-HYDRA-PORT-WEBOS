@@ -106,7 +106,9 @@ service.register('resolve', function (message) {
     if (err) { return fail(message, err); }
 
     var isHevc = (stream.codec === 'HEVC' || stream.codec === 'H265' || stream.codec === 'H.265');
-    var useSmoothMode = payload.playbackMode === 'smooth';
+    /* 1.4.2 renamed the UI modes to direct/relay; accept both spellings so an
+       older app build and the current one both reach the relay. */
+    var useSmoothMode = payload.playbackMode === 'smooth' || payload.playbackMode === 'relay';
     /* webOS 4 handles AVC/H.264 transport streams natively.  Keep those on
        the light direct proxy so they retain native seeking; remux only the
        HEVC streams whose native TS path visibly judders on this TV. */

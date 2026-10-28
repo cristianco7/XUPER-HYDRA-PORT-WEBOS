@@ -834,6 +834,12 @@ function portalServiceCall(method, params, done) {
     if (node.offsetParent === null) { return false; }
     var r = node.getBoundingClientRect();
     if (r.width < 1 || r.height < 1) { return false; }
+    if (dialogPlaySettingsOpen) {
+      return !!closest(node, '#dialog-playsettings');
+    }
+    if (playSettingViewOpen) {
+      return !!closest(node, '#player-playsetting-view');
+    }
     var page = closest(node, '.home-page');
     if (page && !page.classList.contains('is-current')) { return false; }
     var panel = closest(node, '.settings-panel');
@@ -888,6 +894,7 @@ function portalServiceCall(method, params, done) {
     if (state.focus) { state.focus.classList.remove('is-focused'); }
     state.focus = node;
     node.classList.add('is-focused');
+    if (node._onFocus) { node._onFocus(); }
     /* The tab rail expands while it holds focus and collapses to icons as soon
        as the content takes focus (observed on the running app). */
     var rail = $('home-tabs');
@@ -1000,6 +1007,14 @@ function portalServiceCall(method, params, done) {
     if (now - lastBackTime < 250) { return; }
     lastBackTime = now;
     if (state.screen === 'player') {
+      if (dialogPlaySettingsOpen) {
+        closePlaySettingsDialog();
+        return;
+      }
+      if (playSettingViewOpen) {
+        closePlaySettingView();
+        return;
+      }
       if (state.channelsOpen) {
         closeChannelPanel();
       } else if (state.infobar) {
@@ -1081,6 +1096,18 @@ function portalServiceCall(method, params, done) {
     /* Back buttons */
     var isBack = (k === 461 || k === 27 || k === 8 || key === 'Back' || key === 'GoBack' || key === 'Escape');
     if (isBack) {
+      if (dialogPlaySettingsOpen) {
+        closePlaySettingsDialog();
+        if (e.preventDefault) { e.preventDefault(); }
+        if (e.stopPropagation) { e.stopPropagation(); }
+        return;
+      }
+      if (playSettingViewOpen) {
+        closePlaySettingView();
+        if (e.preventDefault) { e.preventDefault(); }
+        if (e.stopPropagation) { e.stopPropagation(); }
+        return;
+      }
       back();
       if (e.preventDefault) { e.preventDefault(); }
       if (e.stopPropagation) { e.stopPropagation(); }
@@ -1136,11 +1163,47 @@ function portalServiceCall(method, params, done) {
       }
     }
 
+    /* Menu / ContextMenu button to open in-player settings */
+    var isMenu = (k === 457 || k === 93 || k === 467 || key === 'Menu' || key === 'ContextMenu');
+    if (state.screen === 'player' && state.playerMode === 'vod' && isMenu) {
+      if (dialogPlaySettingsOpen) {
+        closePlaySettingsDialog();
+      } else if (playSettingViewOpen) {
+        closePlaySettingView();
+      } else {
+        openPlaySettingView();
+      }
+      if (e.preventDefault) { e.preventDefault(); }
+      return;
+    }
+
     if (state.screen === 'player' && (k === 37 || k === 38 || k === 39 || k === 40)) {
+      if (dialogPlaySettingsOpen) {
+        if (k === 37) { moveFocus('left'); }
+        else if (k === 38) { moveFocus('up'); }
+        else if (k === 39) { moveFocus('right'); }
+        else if (k === 40) { moveFocus('down'); }
+        if (e.preventDefault) { e.preventDefault(); }
+        return;
+      }
+      if (playSettingViewOpen) {
+        schedulePlaySettingHide();
+        if (k === 37) { moveFocus('left'); }
+        else if (k === 38) { moveFocus('up'); }
+        else if (k === 39) { moveFocus('right'); }
+        else if (k === 40) { moveFocus('down'); }
+        if (e.preventDefault) { e.preventDefault(); }
+        return;
+      }
       if (state.playerMode === 'vod') {
         if (k === 37) { playerSeek(-10); if (e.preventDefault) { e.preventDefault(); } return; }
         if (k === 39) { playerSeek(10); if (e.preventDefault) { e.preventDefault(); } return; }
-        if (k === 38 || k === 40) {
+        if (k === 40) {
+          openPlaySettingView();
+          if (e.preventDefault) { e.preventDefault(); }
+          return;
+        }
+        if (k === 38) {
           if (state.infobar) { hideInfobar(); } else { showInfobar(); }
           if (e.preventDefault) { e.preventDefault(); }
           return;
@@ -1155,7 +1218,12 @@ function portalServiceCall(method, params, done) {
     else if (k === 39) { moveFocus('right'); }
     else if (k === 40) { moveFocus('down'); }
     else if (k === 13 || k === 32) {
-      if (state.screen === 'player' && state.streamError && playerVideo && playerVideo.src) {
+      if (dialogPlaySettingsOpen) {
+        activate();
+      } else if (playSettingViewOpen) {
+        schedulePlaySettingHide();
+        activate();
+      } else if (state.screen === 'player' && state.streamError && playerVideo && playerVideo.src) {
         var retry = playerVideo.play();
         if (retry && retry.catch) { retry.catch(function () {}); }
         state.streamError = '';
@@ -2719,6 +2787,468 @@ function portalServiceCall(method, params, done) {
     hideInfobar();
   }
 
+  /* --- PlaySettingView (Bottom Drawer) & SelectSubTitleAndAudioDialog Controller --- */
+  var playSettingView = null;
+  var dialogPlaySettings = null;
+  var psvSecSelection = null;
+  var psvSeasonsRow = null;
+  var psvGroupsRow = null;
+  var psvEpisodesRow = null;
+  var psvBtnConfig = null;
+  var psvBtnP1 = null;
+  var psvBtnP2 = null;
+  var psvAspectRow = null;
+
+  var dpsAudioOptions = null;
+  var dpsSubSwitch = null;
+  var dpsRowLang = null;
+  var dpsRowSize = null;
+  var dpsRowStyle = null;
+  var dpsLangOptions = null;
+  var dpsSizeOptions = null;
+  var dpsStyleOptions = null;
+  var dpsBtnExit = null;
+  var playerSubtitles = null;
+
+  var playSettingViewOpen = false;
+  var dialogPlaySettingsOpen = false;
+  var playSettingTimer = null;
+  var currentEpGroupIndex = 0;
+  var vodCurrentAudioTrack = 0;
+  var vodCurrentSubtitle = null;
+  var vodSubActive = false;
+  var vodSubSize = 'normal';
+  var vodSubStyle = 'white';
+  var playerCurrentAspect = 'contain';
+  var activeSubtitleCues = [];
+
+  function parseTimestamp(s) {
+    if (!s) return 0;
+    var p = s.replace(',', '.').split(':');
+    if (p.length === 3) {
+      return (parseFloat(p[0]) * 3600) + (parseFloat(p[1]) * 60) + parseFloat(p[2]);
+    }
+    return 0;
+  }
+
+  function parseSRT(data) {
+    var cues = [];
+    if (!data) return cues;
+    var blocks = data.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n\n');
+    for (var i = 0; i < blocks.length; i++) {
+      var lines = blocks[i].trim().split('\n');
+      if (lines.length >= 2) {
+        var timeLine = (lines[0].indexOf('-->') !== -1) ? lines[0] : lines[1];
+        var textLines = (lines[0].indexOf('-->') !== -1) ? lines.slice(1) : lines.slice(2);
+        if (timeLine && timeLine.indexOf('-->') !== -1) {
+          var m = timeLine.split('-->');
+          var start = parseTimestamp(m[0].trim());
+          var end = parseTimestamp(m[1].trim());
+          var txt = textLines.join('<br>').replace(/<font[^>]*>/gi, '').replace(/<\/font>/gi, '').trim();
+          if (txt) cues.push({ start: start, end: end, text: txt });
+        }
+      }
+    }
+    return cues;
+  }
+
+  function loadSubtitleTrack(sub) {
+    if (!sub || !sub.url) {
+      activeSubtitleCues = [];
+      if (playerSubtitles) playerSubtitles.innerHTML = '';
+      return;
+    }
+    try {
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', sub.url, true);
+      xhr.onload = function () {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          activeSubtitleCues = parseSRT(xhr.responseText);
+        }
+      };
+      xhr.send();
+    } catch (eSub) { /* ignore */ }
+  }
+
+  function applySubtitleStyles() {
+    if (!playerSubtitles) return;
+    playerSubtitles.classList.remove('size-small', 'size-normal', 'size-big');
+    playerSubtitles.classList.add('size-' + vodSubSize);
+    playerSubtitles.classList.remove('color-white', 'color-yellow', 'color-black');
+    playerSubtitles.classList.add('color-' + vodSubStyle);
+  }
+
+  function updateSubtitleDisplay(currentSec) {
+    if (!playerSubtitles) return;
+    if (!vodSubActive || !activeSubtitleCues || !activeSubtitleCues.length) {
+      if (playerSubtitles.innerHTML !== '') playerSubtitles.innerHTML = '';
+      return;
+    }
+    var cue = null;
+    for (var i = 0; i < activeSubtitleCues.length; i++) {
+      if (currentSec >= activeSubtitleCues[i].start && currentSec <= activeSubtitleCues[i].end) {
+        cue = activeSubtitleCues[i];
+        break;
+      }
+    }
+    if (cue) {
+      var html = '<span class="player-subtitles-text">' + cue.text + '</span>';
+      if (playerSubtitles.innerHTML !== html) {
+        playerSubtitles.innerHTML = html;
+      }
+    } else {
+      if (playerSubtitles.innerHTML !== '') {
+        playerSubtitles.innerHTML = '';
+      }
+    }
+  }
+
+  function schedulePlaySettingHide() {
+    if (playSettingTimer) { clearTimeout(playSettingTimer); }
+    playSettingTimer = setTimeout(function () {
+      closePlaySettingView();
+    }, 8000);
+  }
+
+  function openPlaySettingView() {
+    if (!playSettingView) { buildPlayer(); }
+    if (!playSettingView) return;
+    playSettingViewOpen = true;
+    dialogPlaySettingsOpen = false;
+    hideInfobar();
+
+    renderPlaySettingView();
+    playSettingView.classList.add('is-active');
+    if (playerSubtitles) { playerSubtitles.classList.add('shift-up'); }
+
+    schedulePlaySettingHide();
+
+    /* Initial focus: episode if series, else Configuración button */
+    var item = state.playerItem;
+    if (isSeriesItem(item) && psvEpisodesRow) {
+      var curEpBtn = psvEpisodesRow.querySelector('.is-current') || psvEpisodesRow.querySelector('.focusable');
+      if (curEpBtn) { setFocus(curEpBtn); return; }
+    }
+    if (psvBtnConfig) { setFocus(psvBtnConfig); }
+  }
+
+  function closePlaySettingView() {
+    if (playSettingTimer) { clearTimeout(playSettingTimer); playSettingTimer = null; }
+    playSettingViewOpen = false;
+    if (playSettingView) { playSettingView.classList.remove('is-active'); }
+    if (playerSubtitles) { playerSubtitles.classList.remove('shift-up'); }
+    if (state.screen === 'player' && !dialogPlaySettingsOpen) {
+      setFocus(playerStage);
+    }
+  }
+
+  function renderPlaySettingView() {
+    renderPlaySettingSelection();
+    renderPlaySettingPlayerOptions();
+    renderPlaySettingAspectOptions();
+  }
+
+  function renderPlaySettingSelection() {
+    if (!psvSecSelection) return;
+    var item = state.playerItem;
+    if (!item || !isSeriesItem(item)) {
+      psvSecSelection.style.display = 'none';
+      return;
+    }
+    psvSecSelection.style.display = 'block';
+
+    if ((!item.episodes || !item.episodes.length) && !item._detailsLoaded) {
+      loadVodDetail(item, function () {
+        renderPlaySettingSelection();
+      });
+      return;
+    }
+
+    clear(psvSeasonsRow);
+    clear(psvGroupsRow);
+    clear(psvEpisodesRow);
+
+    var episodes = item.episodes || [];
+    var seasons = item.seasons || [];
+
+    if (seasons.length > 1) {
+      psvSeasonsRow.style.display = 'flex';
+      for (var s = 0; s < seasons.length; s++) {
+        (function (seasonIdx) {
+          var sea = seasons[seasonIdx];
+          var seaBtn = el('button', 'psv-season-btn focusable');
+          seaBtn.textContent = 'Temporada ' + (sea.number || (seasonIdx + 1));
+          if (state.detailSeason === seasonIdx) seaBtn.classList.add('is-selected');
+          seaBtn._activate = function () {
+            state.detailSeason = seasonIdx;
+            if (sea.id && sea.id !== item.id) {
+              item._portal = true;
+              item.id = sea.id;
+              item._detailsLoaded = false;
+              loadVodDetail(item, function () {
+                renderPlaySettingSelection();
+              });
+            } else {
+              renderPlaySettingSelection();
+            }
+          };
+          psvSeasonsRow.appendChild(seaBtn);
+        })(s);
+      }
+    } else {
+      psvSeasonsRow.style.display = 'none';
+    }
+
+    var groupSize = 20;
+    var totalGroups = Math.ceil(episodes.length / groupSize);
+    if (totalGroups > 1) {
+      psvGroupsRow.style.display = 'flex';
+      for (var g = 0; g < totalGroups; g++) {
+        (function (grpIdx) {
+          var grpBtn = el('button', 'psv-group-btn focusable');
+          var startNum = (grpIdx * groupSize) + 1;
+          var endNum = Math.min(episodes.length, (grpIdx + 1) * groupSize);
+          grpBtn.textContent = startNum + '-' + endNum;
+          if (currentEpGroupIndex === grpIdx) grpBtn.classList.add('is-selected');
+          grpBtn._activate = function () {
+            currentEpGroupIndex = grpIdx;
+            renderPlaySettingEpisodes(episodes, grpIdx, groupSize);
+            schedulePlaySettingHide();
+          };
+          psvGroupsRow.appendChild(grpBtn);
+        })(g);
+      }
+    } else {
+      psvGroupsRow.style.display = 'none';
+    }
+
+    renderPlaySettingEpisodes(episodes, currentEpGroupIndex, groupSize);
+  }
+
+  function renderPlaySettingEpisodes(episodes, grpIdx, groupSize) {
+    if (!psvEpisodesRow) return;
+    clear(psvEpisodesRow);
+    var start = grpIdx * groupSize;
+    var end = Math.min(episodes.length, start + groupSize);
+    var item = state.playerItem;
+
+    for (var i = start; i < end; i++) {
+      (function (ep, idx) {
+        var epBtn = el('button', 'psv-ep-btn focusable');
+        var epNum = ep.number || ep.seriesNumber || (idx + 1);
+        epBtn.textContent = epNum;
+        if (state.playerEpisode && (state.playerEpisode.id === ep.id || state.playerEpisode.number === ep.number)) {
+          epBtn.classList.add('is-current');
+        }
+        epBtn._activate = function () {
+          closePlaySettingView();
+          startPlayerVideo(item, ep);
+        };
+        psvEpisodesRow.appendChild(epBtn);
+      })(episodes[i], i);
+    }
+  }
+
+  function renderPlaySettingPlayerOptions() {
+    var isRelay = (state.streamMode !== 'direct');
+    if (psvBtnP1) {
+      psvBtnP1.classList.toggle('is-selected', isRelay);
+      var chk1 = psvBtnP1.querySelector('.psv-check');
+      if (chk1) chk1.style.display = isRelay ? 'inline' : 'none';
+    }
+    if (psvBtnP2) {
+      psvBtnP2.classList.toggle('is-selected', !isRelay);
+      var chk2 = psvBtnP2.querySelector('.psv-check');
+      if (chk2) chk2.style.display = !isRelay ? 'inline' : 'none';
+    }
+  }
+
+  function renderPlaySettingAspectOptions() {
+    if (!psvAspectRow) return;
+    var btns = psvAspectRow.querySelectorAll('.psv-btn');
+    for (var i = 0; i < btns.length; i++) {
+      var asp = btns[i].getAttribute('data-aspect');
+      var isSel = (asp === playerCurrentAspect);
+      btns[i].classList.toggle('is-selected', isSel);
+      var chk = btns[i].querySelector('.psv-check');
+      if (chk) chk.style.display = isSel ? 'inline' : 'none';
+    }
+  }
+
+  function setPlayerAspect(aspect) {
+    playerCurrentAspect = aspect || 'contain';
+    if (playerVideo) {
+      playerVideo.classList.remove('aspect-cover', 'aspect-contain', 'aspect-16-9', 'aspect-4-3');
+      playerVideo.classList.add('aspect-' + playerCurrentAspect);
+    }
+    renderPlaySettingAspectOptions();
+  }
+
+  function openPlaySettingsDialog() {
+    if (!dialogPlaySettings) { buildPlayer(); }
+    if (!dialogPlaySettings) return;
+    if (playSettingTimer) { clearTimeout(playSettingTimer); playSettingTimer = null; }
+    dialogPlaySettingsOpen = true;
+
+    renderDialogAudio();
+    renderDialogSubtitle();
+    applySubtitleStyles();
+
+    dialogPlaySettings.classList.add('is-active');
+
+    /* Focus first audio pill or switch */
+    var firstFocus = (dpsAudioOptions && dpsAudioOptions.querySelector('.focusable')) || dpsSubSwitch || dpsBtnExit;
+    if (firstFocus) { setFocus(firstFocus); }
+  }
+
+  function closePlaySettingsDialog() {
+    dialogPlaySettingsOpen = false;
+    if (dialogPlaySettings) { dialogPlaySettings.classList.remove('is-active'); }
+    if (playSettingViewOpen) {
+      if (psvBtnConfig) { setFocus(psvBtnConfig); }
+      schedulePlaySettingHide();
+    } else {
+      if (state.screen === 'player') { setFocus(playerStage); }
+    }
+  }
+
+  function renderDialogAudio() {
+    if (!dpsAudioOptions) return;
+    clear(dpsAudioOptions);
+    var item = state.playerItem;
+    var tracks = [];
+    var raw = (item && item.streamAudioInfo) || '';
+    if (raw) {
+      var parts = raw.split(/[,\/]/);
+      for (var i = 0; i < parts.length; i++) {
+        var code = parts[i].trim();
+        tracks.push({ index: i, label: formatAudioLang(code) });
+      }
+    }
+    if (!tracks.length) {
+      tracks.push({ index: 0, label: 'Español' });
+      if (item && item.moreAudio) {
+        tracks.push({ index: 1, label: 'Inglés' });
+      }
+    }
+    for (var t = 0; t < tracks.length; t++) {
+      (function (track) {
+        var btn = el('button', 'dps-btn focusable');
+        btn.textContent = track.label;
+        if (vodCurrentAudioTrack === track.index) {
+          btn.classList.add('is-selected');
+        }
+        btn._activate = function () {
+          switchAudioTrack(track.index);
+          renderDialogAudio();
+        };
+        dpsAudioOptions.appendChild(btn);
+      })(tracks[t]);
+    }
+  }
+
+  function renderDialogSubtitle() {
+    if (dpsSubSwitch) {
+      dpsSubSwitch.classList.toggle('is-on', vodSubActive);
+      var dotText = dpsSubSwitch.querySelector('.dps-switch-text');
+      if (dotText) dotText.textContent = vodSubActive ? 'ON' : 'OFF';
+    }
+
+    if (dpsRowLang) dpsRowLang.classList.toggle('is-visible', vodSubActive);
+    if (dpsRowSize) dpsRowSize.classList.toggle('is-visible', vodSubActive);
+    if (dpsRowStyle) dpsRowStyle.classList.toggle('is-visible', vodSubActive);
+
+    if (!vodSubActive) return;
+
+    /* Render languages */
+    if (dpsLangOptions) {
+      clear(dpsLangOptions);
+      var item = state.playerItem;
+      var list = (item && item.subtitles) || [];
+      if (!list.length) {
+        list = [{ url: '', lang: 'Español' }];
+      }
+      for (var s = 0; s < list.length; s++) {
+        (function (sub) {
+          var btn = el('button', 'dps-btn focusable');
+          btn.textContent = formatAudioLang(sub.lang || sub.language || 'Sub');
+          if (vodCurrentSubtitle && (vodCurrentSubtitle.url === sub.url || (!sub.url && s === 0))) {
+            btn.classList.add('is-selected');
+          }
+          btn._activate = function () {
+            vodCurrentSubtitle = sub;
+            loadSubtitleTrack(sub);
+            renderDialogSubtitle();
+          };
+          dpsLangOptions.appendChild(btn);
+        })(list[s]);
+      }
+    }
+
+    /* Size buttons */
+    if (dpsSizeOptions) {
+      var sBtns = dpsSizeOptions.querySelectorAll('.dps-btn');
+      for (var si = 0; si < sBtns.length; si++) {
+        var sz = sBtns[si].getAttribute('data-size');
+        sBtns[si].classList.toggle('is-selected', sz === vodSubSize);
+      }
+    }
+
+    /* Style buttons */
+    if (dpsStyleOptions) {
+      var stBtns = dpsStyleOptions.querySelectorAll('.dps-btn');
+      for (var sti = 0; sti < stBtns.length; sti++) {
+        var st = stBtns[sti].getAttribute('data-style');
+        stBtns[sti].classList.toggle('is-selected', st === vodSubStyle);
+      }
+    }
+  }
+
+  function formatAudioLang(code) {
+    var c = (code || '').toLowerCase().trim();
+    if (/spa|esp|castellano|latino/.test(c)) return 'Español';
+    if (/eng|ing|en/.test(c)) return 'Inglés';
+    if (/jpn|jap|ja/.test(c)) return 'Japonés';
+    if (/kor|cor|ko/.test(c)) return 'Coreano';
+    if (/por|pt/.test(c)) return 'Portugués';
+    if (/fra|fr|franc/.test(c)) return 'Francés';
+    if (/ita|it/.test(c)) return 'Italiano';
+    if (/deu|ger|de/.test(c)) return 'Alemán';
+    if (/chi|zho|zh/.test(c)) return 'Chino';
+    return c ? (c.charAt(0).toUpperCase() + c.slice(1)) : 'Pista';
+  }
+
+  function switchAudioTrack(trackIndex) {
+    vodCurrentAudioTrack = trackIndex;
+    if (relayBaseUrl) {
+      var curSec = relayStartOffset + (playerVideo ? (playerVideo.currentTime || 0) : 0);
+      var newUrl = relayBaseUrl + '?start=' + Math.floor(curSec) + '&a=' + trackIndex;
+      playUrl(newUrl);
+    }
+  }
+
+  function restartCurrentPlayback() {
+    if (!playerVideo) return;
+    var curSec = relayBaseUrl ? (relayStartOffset + (playerVideo.currentTime || 0)) : (playerVideo.currentTime || 0);
+    var item = state.playerItem;
+    stopPlayerVideo();
+    setPlayerStatus('Cambiando reproductor…');
+    resolvePlayerStream(item, function (url) {
+      if (url) {
+        if (relayBaseUrl && curSec > 0) {
+          playUrl(relayBaseUrl + '?start=' + Math.floor(curSec) + (vodCurrentAudioTrack ? '&a=' + vodCurrentAudioTrack : ''));
+        } else {
+          playUrl(url);
+          if (curSec > 0) {
+            try { playerVideo.currentTime = curSec; } catch (e) {}
+          }
+        }
+      } else if (!state.streamError) {
+        setPlayerStatus('Sin fuente de reproducción');
+      }
+    });
+  }
+
   function buildPlayer() {
     playerStage = $('player-stage');
     playerInfo = $('player-infobar');
@@ -2737,6 +3267,118 @@ function portalServiceCall(method, params, done) {
     vodSeekBuffered = $('vod-seek-buffered');
     vodSeekThumb = $('vod-seek-thumb');
 
+    /* PlaySettingView elements */
+    playSettingView = $('player-playsetting-view');
+    psvSecSelection = $('psv-sec-selection');
+    psvSeasonsRow = $('psv-seasons-row');
+    psvGroupsRow = $('psv-groups-row');
+    psvEpisodesRow = $('psv-episodes-row');
+    psvBtnConfig = $('psv-btn-config');
+    psvBtnP1 = $('psv-btn-p1');
+    psvBtnP2 = $('psv-btn-p2');
+    psvAspectRow = $('psv-aspect-row');
+
+    if (psvBtnConfig) {
+      psvBtnConfig._activate = function () {
+        openPlaySettingsDialog();
+      };
+    }
+    if (psvBtnP1) {
+      psvBtnP1._activate = function () {
+        if (state.streamMode !== 'relay') {
+          state.streamMode = 'relay';
+          renderPlaySettingPlayerOptions();
+          restartCurrentPlayback();
+        }
+      };
+    }
+    if (psvBtnP2) {
+      psvBtnP2._activate = function () {
+        if (state.streamMode !== 'direct') {
+          state.streamMode = 'direct';
+          renderPlaySettingPlayerOptions();
+          restartCurrentPlayback();
+        }
+      };
+    }
+    if (psvAspectRow) {
+      var aBtns = psvAspectRow.querySelectorAll('.psv-btn');
+      for (var ai = 0; ai < aBtns.length; ai++) {
+        (function (b) {
+          b._activate = function () {
+            var asp = b.getAttribute('data-aspect');
+            setPlayerAspect(asp);
+          };
+        })(aBtns[ai]);
+      }
+    }
+
+    /* Modal Dialog elements */
+    dialogPlaySettings = $('dialog-playsettings');
+    dpsAudioOptions = $('dps-audio-options');
+    dpsSubSwitch = $('dps-sub-switch');
+    dpsRowLang = $('dps-row-lang');
+    dpsRowSize = $('dps-row-size');
+    dpsRowStyle = $('dps-row-style');
+    dpsLangOptions = $('dps-lang-options');
+    dpsSizeOptions = $('dps-size-options');
+    dpsStyleOptions = $('dps-style-options');
+    dpsBtnExit = $('dps-btn-exit');
+    playerSubtitles = $('player-subtitles');
+
+    if (dpsSubSwitch) {
+      dpsSubSwitch._activate = function () {
+        vodSubActive = !vodSubActive;
+        if (!vodSubActive) {
+          loadSubtitleTrack(null);
+        } else {
+          var subs = (state.playerItem && state.playerItem.subtitles) || [];
+          if (!vodCurrentSubtitle && subs.length) {
+            vodCurrentSubtitle = subs[0];
+          }
+          if (vodCurrentSubtitle) {
+            loadSubtitleTrack(vodCurrentSubtitle);
+          }
+        }
+        renderDialogSubtitle();
+      };
+    }
+
+    if (dpsSizeOptions) {
+      var sBtns = dpsSizeOptions.querySelectorAll('.dps-btn');
+      for (var si = 0; si < sBtns.length; si++) {
+        (function (b) {
+          b._activate = function () {
+            vodSubSize = b.getAttribute('data-size') || 'normal';
+            applySubtitleStyles();
+            renderDialogSubtitle();
+          };
+        })(sBtns[si]);
+      }
+    }
+
+    if (dpsStyleOptions) {
+      var stBtns = dpsStyleOptions.querySelectorAll('.dps-btn');
+      for (var sti = 0; sti < stBtns.length; sti++) {
+        (function (b) {
+          b._activate = function () {
+            vodSubStyle = b.getAttribute('data-style') || 'white';
+            applySubtitleStyles();
+            renderDialogSubtitle();
+          };
+        })(stBtns[sti]);
+      }
+    }
+
+    if (dpsBtnExit) {
+      dpsBtnExit._activate = function () {
+        closePlaySettingsDialog();
+      };
+    }
+
+    applySubtitleStyles();
+    setPlayerAspect(playerCurrentAspect);
+
     clear(playerInfo); clear(playerChannels);
 
     playerStage.classList.add('focusable');
@@ -2744,7 +3386,11 @@ function portalServiceCall(method, params, done) {
       if (state.playerMode === 'vod') {
         if (dir === 'left') { playerSeek(-10); return true; }
         if (dir === 'right') { playerSeek(10); return true; }
-        if (dir === 'up' || dir === 'down') {
+        if (dir === 'down') {
+          openPlaySettingView();
+          return true;
+        }
+        if (dir === 'up') {
           if (state.infobar) { hideInfobar(); } else { showInfobar(); }
           return true;
         }
@@ -2918,7 +3564,12 @@ function portalServiceCall(method, params, done) {
     state.streamError = '';
     setPlayerStatus('');
     showOsdIcon('none');
-    if (playerVodInfo) { playerVodInfo.classList.remove('is-active'); }
+    closePlaySettingsDialog();
+    closePlaySettingView();
+    vodSubActive = false;
+    activeSubtitleCues = [];
+    vodCurrentSubtitle = null;
+    if (playerSubtitles) { playerSubtitles.innerHTML = ''; }
     /* Cancel any pending seek */
     if (seekTimer) { clearTimeout(seekTimer); seekTimer = null; seekPending = 0; }
     releaseRelaySeek();
@@ -3017,6 +3668,7 @@ function portalServiceCall(method, params, done) {
         var cur = relayBaseUrl ? (relayStartOffset + (playerVideo.currentTime || 0)) : playerVideo.currentTime;
         var totalDur = (state.playerItem && state.playerItem.duration) || playerVideo.duration;
         updateVodProgress(cur, totalDur);
+        updateSubtitleDisplay(cur);
       }
     };
     playerVideo.onpause = function () {
@@ -3113,6 +3765,7 @@ function portalServiceCall(method, params, done) {
         item.streamCodec = payload.codec || '';
         item.duration = payload.duration || item.duration || 0;
         item.subtitles = payload.subtitles || [];
+        item.streamAudioInfo = payload.audio || '';
         item.isHls = !!payload.isHls;
         /* Read-only local diagnostics for the webOS inspector.  Do not place
            the stream URL, licence or headers here. */

@@ -25,7 +25,13 @@ function log() {
   console.log.apply(console, ['[relay]'].concat(args));
 }
 
-try { fs.chmodSync(FFMPEG, parseInt('755', 8)); } catch (e) { /* si falla, spawn lo dira */ }
+try {
+  fs.chmodSync(FFMPEG, parseInt('755', 8));
+} catch (e) {
+  /* Installed packages are owned by root; the service user cannot chmod them.
+     Record it: if the packaged mode is wrong, spawn() would fail with EACCES. */
+  log('no se pudo aplicar permiso de ejecucion a ffmpeg:', e.message);
+}
 
 function stopCurrent() {
   if (current) {
@@ -227,7 +233,17 @@ server.listen(PORT, HOST, function () { log('escuchando en', HOST + ':' + PORT);
 module.exports = {
   register: register,
   stop: stopCurrent,
-  available: function () { return fs.existsSync(FFMPEG); },
+  available: function () {
+    /* A packaged file can exist but lack +x (ares-package on Windows writes
+       0666). Report that as unavailable instead of letting spawn() fail later
+       and silently falling back to direct playback. */
+    try {
+      fs.accessSync(FFMPEG, (fs.constants && fs.constants.X_OK) || fs.X_OK || 1);
+      return true;
+    } catch (eAccess) {
+      return false;
+    }
+  },
   path: function () { return FFMPEG; },
   port: function () { return PORT; }
 };

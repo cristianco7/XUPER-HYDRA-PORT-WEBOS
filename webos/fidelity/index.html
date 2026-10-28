@@ -104,7 +104,98 @@
             <div class="vod-tip"><img src="assets/original/common/icon_info_ok.png" alt=""><span>Pausa/Play</span></div>
             <div class="vod-tip"><img src="assets/original/common/icon_info_back.png" alt=""><span>-10s</span></div>
             <div class="vod-tip"><img src="assets/original/common/icon_info_fast.png" alt=""><span>+10s</span></div>
+            <div class="vod-tip"><img src="assets/original/common/icon_info_menu.png" alt=""><span>Ajustes (Abajo)</span></div>
           </div>
+        </div>
+      </div>
+    <!-- VOD Subtitle Text Overlay -->
+    <div class="player-subtitles" id="player-subtitles"></div>
+
+    <!-- VOD In-Player Bottom Settings Drawer (PlaySettingView) -->
+    <div class="player-playsetting-view" id="player-playsetting-view">
+      <div class="psv-scroll scrollable" id="psv-scroll">
+        <!-- SELECCIÓN (Series episodes) -->
+        <div class="psv-section" id="psv-sec-selection">
+          <div class="psv-sec-title">SELECCIÓN</div>
+          <div class="psv-seasons-row scrollable" id="psv-seasons-row"></div>
+          <div class="psv-groups-row scrollable" id="psv-groups-row"></div>
+          <div class="psv-row scrollable" id="psv-episodes-row"></div>
+        </div>
+
+        <!-- IDIOMA -->
+        <div class="psv-section" id="psv-sec-audio">
+          <div class="psv-sec-title">IDIOMA</div>
+          <div class="psv-row scrollable" id="psv-audio-row">
+            <button class="psv-btn focusable psv-btn-config" id="psv-btn-config">Configuración</button>
+          </div>
+        </div>
+
+        <!-- OPCIONES DE REPRODUCTOR -->
+        <div class="psv-section" id="psv-sec-player">
+          <div class="psv-sec-title">OPCIONES DE REPRODUCTOR</div>
+          <div class="psv-row scrollable" id="psv-player-row">
+            <button class="psv-btn focusable" id="psv-btn-p1"><span class="psv-check">✔</span>Reproductor 1</button>
+            <button class="psv-btn focusable" id="psv-btn-p2"><span class="psv-check">✔</span>Reproductor 2</button>
+          </div>
+        </div>
+
+        <!-- FORMATO DE PANTALLA -->
+        <div class="psv-section" id="psv-sec-aspect">
+          <div class="psv-sec-title">FORMATO DE PANTALLA</div>
+          <div class="psv-row scrollable" id="psv-aspect-row">
+            <button class="psv-btn focusable" data-aspect="cover"><span class="psv-check">✔</span>Pantalla completa</button>
+            <button class="psv-btn focusable" data-aspect="contain"><span class="psv-check">✔</span>Normal</button>
+            <button class="psv-btn focusable" data-aspect="16-9"><span class="psv-check">✔</span>16:9</button>
+            <button class="psv-btn focusable" data-aspect="4-3"><span class="psv-check">✔</span>4:3</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Dialog: Ajuste de reproducir (SelectSubTitleAndAudioDialog) -->
+    <div class="dialog-playsettings-overlay" id="dialog-playsettings">
+      <div class="dialog-playsettings-box">
+        <div class="dps-header">Ajuste de reproducir</div>
+        <div class="dps-body scrollable">
+          <!-- Audio Row -->
+          <div class="dps-row" id="dps-row-audio">
+            <div class="dps-label">Audio</div>
+            <div class="dps-options scrollable" id="dps-audio-options"></div>
+          </div>
+          <!-- Subtítulo Switch -->
+          <div class="dps-row" id="dps-row-switch">
+            <div class="dps-label">Subtítulo</div>
+            <div class="dps-switch focusable" id="dps-sub-switch">
+              <span class="dps-switch-dot"></span>
+              <span class="dps-switch-text">OFF</span>
+            </div>
+          </div>
+          <!-- Subtitle Languages (visible when switch ON) -->
+          <div class="dps-row dps-sub-subrow" id="dps-row-lang">
+            <div class="dps-label">Idioma</div>
+            <div class="dps-options scrollable" id="dps-lang-options"></div>
+          </div>
+          <!-- Subtitle Size -->
+          <div class="dps-row dps-sub-subrow" id="dps-row-size">
+            <div class="dps-label">Tamaño</div>
+            <div class="dps-options" id="dps-size-options">
+              <button class="dps-btn focusable" data-size="small">Pequeño</button>
+              <button class="dps-btn focusable is-selected" data-size="normal">Normal</button>
+              <button class="dps-btn focusable" data-size="big">Grande</button>
+            </div>
+          </div>
+          <!-- Subtitle Color Style -->
+          <div class="dps-row dps-sub-subrow" id="dps-row-style">
+            <div class="dps-label">Estilo</div>
+            <div class="dps-options" id="dps-style-options">
+              <button class="dps-btn focusable is-selected" data-style="white"><span class="dps-color-preview white">Aa</span></button>
+              <button class="dps-btn focusable" data-style="yellow"><span class="dps-color-preview yellow">Aa</span></button>
+              <button class="dps-btn focusable" data-style="black"><span class="dps-color-preview black">Aa</span></button>
+            </div>
+          </div>
+        </div>
+        <div class="dps-footer">
+          <button class="dps-exit-btn focusable" id="dps-btn-exit">Salida</button>
         </div>
       </div>
     </div>
