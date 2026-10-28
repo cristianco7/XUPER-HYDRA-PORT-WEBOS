@@ -3050,7 +3050,8 @@ function portalServiceCall(method, params, done) {
   }
 
   function renderPlaySettingPlayerOptions() {
-    var isRelay = (state.streamMode !== 'direct');
+    /* 'normal' is the default direct path; only 'relay'/'smooth' means FFmpeg. */
+    var isRelay = (state.streamMode === 'relay' || state.streamMode === 'smooth');
     if (psvBtnP1) {
       psvBtnP1.classList.toggle('is-selected', isRelay);
       var chk1 = psvBtnP1.querySelector('.psv-check');
