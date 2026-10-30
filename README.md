@@ -116,6 +116,16 @@ No hace falta Node.js ni `ares-cli`: usa el cliente SSH que ya trae Windows
 la versión, comprueba que `ffmpeg` quedó ejecutable y abre la app. También avisa
 si el PC y la TV están en redes distintas.
 
+Detalles que resuelve solo, porque son la causa habitual de que falle:
+
+- **Puerto**: las TV LG tienen el SSH del modo desarrollador en el **9922**
+  (no en el 22). Prueba 9922 y 22 y usa el que responda.
+- **Criptografía antigua**: webOS 4 lleva OpenSSH 6.1, que solo ofrece
+  `ssh-rsa`/SHA-1 y OpenSSH 9 de Windows rechaza por defecto. El instalador
+  reactiva esos algoritmos **solo para esa conexión**.
+- **Copia**: fuerza el protocolo `scp` antiguo (`-O`), porque el servidor de la
+  TV no tiene SFTP.
+
 - Guía visual paso a paso (se abre sin internet, incluye **modo presentación**
   para grabar): [`docs/instalar/index.html`](docs/instalar/index.html)
 - Guion del vídeo tutorial: [`docs/instalar/guion-video.md`](docs/instalar/guion-video.md)

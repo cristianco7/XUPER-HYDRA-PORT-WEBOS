@@ -30,7 +30,7 @@ param(
     [string]$Ipk,
     [string]$TvHost,
     [string]$TvUser,
-    [int]$Port = 22,
+    [int]$Port = 0,
     [switch]$DryRun,
     [switch]$NoPause
 )
@@ -153,9 +153,10 @@ function Test-SameLan([string]$ip, $locals) {
     return $null
 }
 
-function Find-SshHosts($locals, [int]$tcpPort = 22) {
-    # Busca en la red local aparatos con el puerto 22 abierto (el modo
-    # desarrollador de LG lo abre). Va por tandas para tardar pocos segundos.
+function Find-SshHosts($locals, [int[]]$ports = @(22, 9922)) {
+    # Busca en la red local aparatos con el SSH del modo desarrollador abierto.
+    # Las TV LG suelen usar el 9922 (y a veces tambien el 22). Va por tandas
+    # para tardar pocos segundos.
     $found = @()
     foreach ($l in $locals) {
         $p = $l.IP.Split('.')
@@ -167,15 +168,18 @@ function Find-SshHosts($locals, [int]$tcpPort = 22) {
             for ($h = $start; $h -le $end; $h++) {
                 $ip = "$base.$h"
                 if ($ip -eq $l.IP) { continue }
-                $c = New-Object System.Net.Sockets.TcpClient
-                try {
-                    $tasks += [pscustomobject]@{
-                        IP = $ip
-                        Client = $c
-                        Async = $c.BeginConnect($ip, $tcpPort, $null, $null)
+                foreach ($tcpPort in $ports) {
+                    $c = New-Object System.Net.Sockets.TcpClient
+                    try {
+                        $tasks += [pscustomobject]@{
+                            IP = $ip
+                            Port = $tcpPort
+                            Client = $c
+                            Async = $c.BeginConnect($ip, $tcpPort, $null, $null)
+                        }
+                    } catch {
+                        try { $c.Close() } catch { }
                     }
-                } catch {
-                    try { $c.Close() } catch { }
                 }
             }
             Start-Sleep -Milliseconds 400
@@ -183,46 +187,109 @@ function Find-SshHosts($locals, [int]$tcpPort = 22) {
                 try {
                     if ($t.Async.AsyncWaitHandle.WaitOne(0)) {
                         $t.Client.EndConnect($t.Async)
-                        if ($t.Client.Connected) { $found += $t.IP }
+                        if ($t.Client.Connected) {
+                            $found += [pscustomobject]@{ IP = $t.IP; Port = $t.Port }
+                        }
                     }
                 } catch { }
                 try { $t.Client.Close() } catch { }
             }
         }
     }
-    return @($found | Sort-Object -Unique)
+    # Si un equipo tiene los dos puertos, quedarse con el de LG (9922).
+    $byIp = @{}
+    foreach ($f in $found) {
+        if (-not $byIp.ContainsKey($f.IP)) { $byIp[$f.IP] = $f }
+        elseif ($f.Port -eq 9922) { $byIp[$f.IP] = $f }
+    }
+    return @($byIp.Values | Sort-Object IP)
+}
+
+function Find-SshPort([string]$ip, [int[]]$candidates, [int]$timeoutMs = 2500) {
+    foreach ($p in $candidates) {
+        if ($p -le 0) { continue }
+        if (Test-Port $ip $p $timeoutMs) { return $p }
+    }
+    return 0
 }
 
 function Select-TvFromScan($locals) {
     if (-not $locals -or $locals.Count -eq 0) {
         Fail 'No encuentro la red de este ordenador.'
         Info 'Comprueba que el PC tiene WiFi o cable conectado.'
-        return ''
+        return $null
     }
     Title 'Buscando la TV en tu red (unos segundos)...'
     Info 'Solo funciona si el Modo Desarrollador esta activo en la TV.'
-    $ips = Find-SshHosts $locals 22
-    if ($ips.Count -eq 0) {
+    $found = @(Find-SshHosts $locals @(22, 9922))
+    if ($found.Count -eq 0) {
         Warn 'No he encontrado ningun aparato con el modo desarrollador abierto.'
         Info 'Abre la app "Developer Mode" en la TV y comprueba que esta activada.'
         Info 'Despues escribe B otra vez, o copia la IP a mano.'
-        return ''
+        return $null
     }
-    if ($ips.Count -eq 1) {
-        Ok ('Encontrado: ' + $ips[0])
+    if ($found.Count -eq 1) {
+        Ok ('Encontrado: ' + $found[0].IP + '  (puerto ' + $found[0].Port + ')')
         $confirm = Read-WithDefault 'Es tu televisor? (s/n)' 's'
-        if ($confirm -match '^[nN]') { return '' }
-        return $ips[0]
+        if ($confirm -match '^[nN]') { return $null }
+        return $found[0]
     }
     Title 'He encontrado varios aparatos. Cual es tu televisor?'
-    for ($i = 0; $i -lt $ips.Count; $i++) {
-        Info (('{0}) {1}') -f ($i + 1), $ips[$i])
+    for ($i = 0; $i -lt $found.Count; $i++) {
+        Info (('{0}) {1}   (puerto {2})') -f ($i + 1), $found[$i].IP, $found[$i].Port)
     }
     $pick = Read-WithDefault 'Numero' '1'
     $idx = 1
     [void][int]::TryParse($pick, [ref]$idx)
-    $idx = [Math]::Max(1, [Math]::Min($ips.Count, $idx))
-    return $ips[$idx - 1]
+    $idx = [Math]::Max(1, [Math]::Min($found.Count, $idx))
+    return $found[$idx - 1]
+}
+
+function Test-SshOption([string]$opt) {
+    # OpenSSH antiguo no conoce algunas opciones: se comprueban antes de usarlas.
+    try {
+        & ssh -G -o $opt localhost > $null 2>&1
+        return ($LASTEXITCODE -eq 0)
+    } catch {
+        return $false
+    }
+}
+
+function Get-SshOpts {
+    # Las TV LG con webOS 4 llevan OpenSSH 6.1: solo ssh-rsa y SHA-1, que
+    # OpenSSH 9 rechaza por defecto. Se reactivan SOLO para esta conexion.
+    $o = @(
+        '-o', 'StrictHostKeyChecking=accept-new',
+        '-o', 'ConnectTimeout=20',
+        '-o', 'ServerAliveInterval=15',
+        '-o', 'PreferredAuthentications=publickey,keyboard-interactive,password',
+        '-o', 'NumberOfPasswordPrompts=3'
+    )
+    foreach ($pair in @(
+        @('HostKeyAlgorithms', 'ssh-rsa'),
+        @('PubkeyAcceptedAlgorithms', 'ssh-rsa'),
+        @('KexAlgorithms', 'diffie-hellman-group14-sha1'),
+        @('MACs', 'hmac-sha1')
+    )) {
+        $opt = $pair[0] + '=+' + $pair[1]
+        if (Test-SshOption $opt) { $o += @('-o', $opt) }
+    }
+    return $o
+}
+
+function Test-ScpLegacy {
+    # scp 9+ usa SFTP por defecto; las TV webOS 4 solo entienden el scp antiguo
+    # (-O). Se mira si este Windows soporta -O antes de usarlo.
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $usage = (& scp 2>&1 | Out-String)
+    } catch {
+        $usage = ''
+    } finally {
+        $ErrorActionPreference = $prev
+    }
+    return ($usage -match '\[-[0-9A-Za-z]*O[0-9A-Za-z]*\]')
 }
 
 function Get-IpkCandidate {
@@ -384,10 +451,13 @@ $locals = @(Get-LocalIPv4)
 if ($locals.Count -gt 0) {
     Info ('Este ordenador esta en: ' + (($locals | ForEach-Object { $_.IP }) -join ', '))
 }
+$detectedPort = 0
+
 if (-not $TvHost) {
     $def = ''
     if ($cfg -and $cfg.host) { $def = [string]$cfg.host }
     if ($def) { Info ('La ultima vez funciono con ' + $def + '. Pulsa Enter para repetirla.') }
+    $intentos = 0
     while (-not $TvHost) {
         $v = Read-WithDefault 'IP del televisor (o B para buscarla)' $def
         if ([string]::IsNullOrWhiteSpace($v) -or $v -match '^(?i)(b|buscar|busca)$') {
@@ -399,7 +469,8 @@ if (-not $TvHost) {
                 Pause-End
                 exit 1
             }
-            $TvHost = Select-TvFromScan $locals
+            $hit = Select-TvFromScan $locals
+            if ($hit) { $TvHost = $hit.IP; $detectedPort = [int]$hit.Port }
             continue
         }
         if (-not (Test-Host $v)) {
@@ -430,16 +501,55 @@ if ((Test-IPv4 $TvHost) -and $locals.Count -gt 0) {
 
 # ---------------------------------------------------------- 4. conexion
 Step '4/6' 'Comprobando la conexion'
+
+# Puerto: las TV LG usan el 9922 para el SSH del modo desarrollador; algunas
+# tambien abren el 22. Se prueban los dos en vez de dar por hecho el 22.
+if ($Port -le 0) {
+    $candidatos = @()
+    if ($detectedPort -gt 0) { $candidatos += $detectedPort }
+    if ($cfg -and $cfg.port) { $candidatos += [int]$cfg.port }
+    $candidatos += 9922
+    $candidatos += 22
+    $candidatos = @($candidatos | Where-Object { $_ -gt 0 } | Select-Object -Unique)
+    if ($DryRun) {
+        $Port = $candidatos[0]
+        Info ('Puerto: ' + $Port + ' (o el 22; se detecta al conectar)')
+    } else {
+        $Port = Find-SshPort $TvHost $candidatos 2500
+        if ($Port -eq 0) {
+            $Port = $candidatos[0]
+            Warn ('El SSH de la TV no responde en el puerto ' + $Port + '.')
+        } else {
+            Ok ('El SSH de la TV escucha en el puerto ' + $Port)
+        }
+    }
+}
+
 if ($DryRun) {
     Info 'Modo de prueba: no se comprueba la red.'
 } else {
-    while (-not (Test-Port $TvHost $Port 3000)) {
+    while ($true) {
+        if (Test-Port $TvHost $Port 3000) { Ok 'El televisor responde'; break }
+
         Warn ('El televisor no responde en ' + $TvHost + ':' + $Port + '.')
         Info 'Suele ser una de tres cosas: la TV esta apagada, la IP ha cambiado,'
         Info 'o la TV y el PC estan en redes distintas.'
         if ($locals.Count -gt 0) {
             Info ('Este PC esta en: ' + (($locals | ForEach-Object { $_.IP }) -join ', '))
         }
+
+        # Antes de preguntar, probar el otro puerto habitual de LG.
+        $cambiado = $false
+        foreach ($otro in @(9922, 22)) {
+            if ($otro -ne $Port -and (Test-Port $TvHost $otro 1500)) {
+                Ok ('Pero responde en el puerto ' + $otro + ': uso ese.')
+                $Port = $otro
+                $cambiado = $true
+                break
+            }
+        }
+        if ($cambiado) { continue }
+
         Title 'Que quieres hacer?'
         Info '1) Escribir otra IP'
         Info '2) Buscar la TV en la red (recomendado)'
@@ -448,22 +558,24 @@ if ($DryRun) {
         if ($pick -eq '3') { Pause-End; exit 1 }
         if ($pick -eq '1') {
             $nueva = Read-WithDefault 'IP del televisor' ''
-            if (Test-Host $nueva) { $TvHost = $nueva } else { Fail 'Eso no parece una IP.' }
+            if (Test-Host $nueva) {
+                $TvHost = $nueva
+                $Port = Find-SshPort $TvHost @(9922, 22) 2000
+                if ($Port -eq 0) { $Port = 9922 }
+            } else {
+                Fail 'Eso no parece una IP.'
+            }
             continue
         }
-        $encontrada = Select-TvFromScan $locals
-        if ($encontrada) { $TvHost = $encontrada }
+        $hit = Select-TvFromScan $locals
+        if ($hit) { $TvHost = $hit.IP; $Port = [int]$hit.Port }
     }
-    Ok 'El televisor responde'
 }
 
 Ok ('TV: ' + $TvHost + ':' + $Port + '  usuario: ' + $TvUser)
 
-$script:SshOpts = @(
-    '-o', 'StrictHostKeyChecking=accept-new',
-    '-o', 'ConnectTimeout=20',
-    '-o', 'ServerAliveInterval=15'
-)
+$script:SshOpts = @(Get-SshOpts)
+$script:ScpLegacy = Test-ScpLegacy
 
 $remoteDir = '/media/developer/temp'
 $remoteIpk = "$remoteDir/" + $ipkItem.Name
@@ -486,7 +598,9 @@ Info 'Te va a pedir la contrasena DOS veces. Es normal.'
 Info 'Escribe la clave que muestra la app Developer Mode (no se ve al escribir).'
 Write-Host ''
 
-$scpArgs = @('-P', "$Port") + $script:SshOpts + @($ipkPath, ($TvUser + '@' + $TvHost + ':' + $remoteIpk))
+$scpArgs = @('-P', "$Port")
+if ($script:ScpLegacy) { $scpArgs = @('-O') + $scpArgs }
+$scpArgs = $scpArgs + $script:SshOpts + @($ipkPath, ($TvUser + '@' + $TvHost + ':' + $remoteIpk))
 Invoke-Native 'scp' $scpArgs
 if ($script:LastExit -ne 0) {
     $diag = Get-SshDiagnosis
@@ -498,7 +612,9 @@ if ($script:LastExit -ne 0) {
     Warn 'No pude escribir en /media/developer/temp. Pruebo en /tmp...'
     $remoteDir = '/tmp'
     $remoteIpk = "$remoteDir/" + $ipkItem.Name
-    $scpArgs = @('-P', "$Port") + $script:SshOpts + @($ipkPath, ($TvUser + '@' + $TvHost + ':' + $remoteIpk))
+    $scpArgs = @('-P', "$Port")
+    if ($script:ScpLegacy) { $scpArgs = @('-O') + $scpArgs }
+    $scpArgs = $scpArgs + $script:SshOpts + @($ipkPath, ($TvUser + '@' + $TvHost + ':' + $remoteIpk))
     Invoke-Native 'scp' $scpArgs
     if ($script:LastExit -ne 0) {
         Explain-SshError (Get-SshDiagnosis)
