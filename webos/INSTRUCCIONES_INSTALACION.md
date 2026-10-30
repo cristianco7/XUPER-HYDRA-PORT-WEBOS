@@ -40,6 +40,14 @@ redes distintas.
 > `KexAlgorithms=+diffie-hellman-group14-sha1`, …), además de forzar `scp -O`
 > porque la TV no tiene SFTP.
 
+> **Nota sobre KEY SERVER.** Con *KEY SERVER* activado la TV rechaza la clave
+> como contraseña (`Permission denied (publickey,keyboard-interactive)`). En ese
+> modo publica una clave privada cifrada en `http://IP:9991/webos_rsa`, que es
+> lo que descarga `ares-novacom --getkey`. El instalador la descarga, la
+> descifra con la passphrase (`ssh-keygen -p -m PEM`), entra con `ssh -i` y
+> borra la clave descifrada al terminar. No se pide nada más al usuario: si la
+> contraseña falla, prueba la llave automáticamente.
+
 Opciones avanzadas del instalador:
 
 ```powershell

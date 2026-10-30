@@ -421,7 +421,10 @@
           (la opción 2 es solo para televisores modificados).</li>
         <li>Ahora pedirá la <b>clave de la TV</b>. Escríbela: <b>no se ve nada mientras escribes</b>.
           Pulsa <b>Enter</b>. El instalador la comprueba con la TV antes de copiar nada; si está mal,
-          te deja escribirla otra vez (hasta 3 intentos).</li>
+          te deja escribirla otra vez (hasta 3 intentos).
+          <br><span style="color:var(--ink-soft);font-size:16px">Si tu TV tiene <b>KEY SERVER</b> en ON,
+          verás además <code>La TV acepta la llave de seguridad (KEY SERVER)</code>. Es correcto:
+          el instalador usa la llave de la TV y tú no tienes que hacer nada más.</span></li>
         <li>Espera. Verás puntos y mensajes. <b>No cierres la ventana.</b></li>
       </ol>
 
@@ -655,6 +658,18 @@
         <summary>Me sale “acceso denegado” al escribir la clave</summary>
         <p>Suele ser la clave equivocada o una sesión caducada. Vuelve a la app Developer Mode:
         si pone un tiempo restante bajo o “expirado”, renuévala.</p>
+        <p>Ojo con las letras: la clave distingue mayúsculas de minúsculas y no lleva espacios.
+        Cópiala tal cual aparece en la TV.</p>
+      </details>
+
+      <details>
+        <summary>Mi TV tiene “KEY SERVER” en ON, ¿cambia algo?</summary>
+        <p>No tienes que hacer nada distinto. Con esa opción activada la TV no acepta la clave como
+        contraseña: publica una <b>llave de seguridad</b> que el instalador descarga por su cuenta y
+        desbloquea con esa misma clave. Es el mismo mecanismo que usa la herramienta oficial de LG
+        (<code>ares-novacom --getkey</code>). El instalador prueba primero la contraseña y, si la TV la
+        rechaza, usa la llave automáticamente. Si ves
+        <code>La TV acepta la llave de seguridad (KEY SERVER)</code>, todo va bien.</p>
       </details>
 
       <details>

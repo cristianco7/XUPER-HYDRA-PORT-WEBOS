@@ -44,6 +44,9 @@ $SvcDir     = "/media/developer/apps/usr/palm/services/$SvcId"
 $ConfigFile = Join-Path $PSScriptRoot 'instalar-config.json'
 $script:LastExit = 0
 $script:Fail = 0
+$script:KeyPath = ''
+$script:KeyDir = ''
+$script:UseKey = $false
 
 # ---------------------------------------------------------------- apariencia
 function Line { Write-Host ('  ' + ('-' * 68)) -ForegroundColor DarkGray }
@@ -64,6 +67,7 @@ function Show-Banner {
 }
 
 function Pause-End {
+    Remove-TvKey
     if ($NoPause) { return }
     Write-Host ''
     Read-Host '   Pulsa ENTER para cerrar esta ventana' | Out-Null
@@ -389,6 +393,84 @@ function Test-TvPassword([string]$pass) {
     }
 }
 
+function Set-KeyAcl([string]$path) {
+    # ssh se niega a usar una clave que puedan leer otros usuarios del PC.
+    # icacls quita la herencia y deja el archivo solo para el usuario actual.
+    $me = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+    & icacls $path /inheritance:r /grant:r ($me + ':(F)') 2>&1 | Out-Null
+}
+
+function Remove-TvKey {
+    if ($script:KeyDir -and (Test-Path -LiteralPath $script:KeyDir)) {
+        Remove-Item -LiteralPath $script:KeyDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    $script:KeyDir = ''
+    $script:KeyPath = ''
+    $script:UseKey = $false
+}
+
+function Get-TvKey([string]$ip, [string]$passphrase) {
+    # Las TV con "KEY SERVER" activado no aceptan contrasena: publican una clave
+    # privada cifrada en http://IP:9991/webos_rsa y la passphrase de Developer
+    # Mode la descifra. Es exactamente lo que hace "ares-novacom --getkey".
+    if (-not (Test-Port $ip 9991 1500)) { return '' }
+    Remove-TvKey
+    $dir = Join-Path $env:TEMP ('xuper-tvkey-' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+    $path = Join-Path $dir 'webos_rsa'
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+        Invoke-WebRequest -Uri ('http://' + $ip + ':9991/webos_rsa') -OutFile $path -UseBasicParsing -TimeoutSec 10 | Out-Null
+        if (-not (Test-Path -LiteralPath $path)) { return '' }
+        $head = ((Get-Content -LiteralPath $path -TotalCount 2) -join ' ')
+        if ($head -notmatch 'PRIVATE KEY') { return '' }
+        Set-KeyAcl $path
+        $script:KeyDir = $dir
+        if ($head -match 'ENCRYPTED') {
+            # ssh-keygen descifra el PEM sin abrir ningun prompt (por eso no se
+            # cuelga como pasaba al pasar la clave cifrada a ssh -i).
+            & ssh-keygen -p -m PEM -P $passphrase -N '""' -f $path 2>&1 | Out-Null
+            if ($LASTEXITCODE -ne 0) { return '' }
+        }
+        $pub = (& ssh-keygen -y -f $path 2>&1 | Out-String)
+        if ($pub -notmatch '^ssh-(rsa|ed25519)') { return '' }
+        return $path
+    } catch {
+        return ''
+    } finally {
+        $ErrorActionPreference = $prev
+    }
+}
+
+function Test-KeyAuth([string]$keyPath) {
+    # Comprueba que la TV acepta esa clave, sin pedir nada por consola.
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $a = @('-i', $keyPath, '-o', 'IdentitiesOnly=yes', '-o', 'BatchMode=yes',
+            '-o', 'NumberOfPasswordPrompts=0', '-p', "$Port") + $script:SshOpts + @(
+            ($TvUser + '@' + $TvHost), 'true')
+        $out = & ssh @a 2>&1 | Out-String
+        $script:LastAuthError = $out
+        return ($LASTEXITCODE -eq 0)
+    } catch {
+        $script:LastAuthError = '' + $_.Exception.Message
+        return $false
+    } finally {
+        $ErrorActionPreference = $prev
+    }
+}
+
+function Get-AuthArgs {
+    # Con clave: -i y BatchMode (asi ssh nunca se queda esperando una tecla).
+    if ($script:UseKey -and $script:KeyPath) {
+        return @('-i', $script:KeyPath, '-o', 'IdentitiesOnly=yes',
+            '-o', 'BatchMode=yes', '-o', 'NumberOfPasswordPrompts=0')
+    }
+    return @()
+}
+
 function Get-SshDiagnosis {
     # BatchMode nunca pide contrasena, asi que se puede capturar la salida sin
     # riesgo de esconder el prompt. Sirve para distinguir red de autenticacion.
@@ -656,6 +738,7 @@ while (-not $tvPass) {
     if ($intentosPass -gt 3) {
         Fail 'La TV no acepta ninguna de las claves escritas.'
         Info 'Abre la app "Developer Mode" en la TV y mira la clave de ahora.'
+        Info 'Si pone KEY SERVER en ON, esa misma clave desbloquea la llave de la TV.'
         Info 'Si la sesion esta caducada, renovadla (dura 50 horas) y repite.'
         Pause-End
         exit 1
@@ -668,22 +751,40 @@ while (-not $tvPass) {
     }
     Info 'Comprobando la clave con la TV...'
     if (Test-TvPassword $tvPass) {
+        $script:UseKey = $false
         Ok 'La TV acepta la clave'
-    } else {
-        Fail 'La TV ha rechazado esa clave.'
-        Info 'Escribela otra vez con cuidado: no se ve al escribir.'
-        if ($intentosPass -ge 2) {
-            Info 'Tiene que ser la que muestra la app Developer Mode, tal cual.'
-        }
-        $tvPass = ''
+        break
     }
+    # Con "KEY SERVER" activado la TV no admite contrasena: la passphrase sirve
+    # para descifrar la clave de seguridad que la TV publica en el puerto 9991.
+    Info 'No la acepta como contrasena. Probando la llave de seguridad...'
+    $keyPath = Get-TvKey $TvHost $tvPass
+    if ($keyPath) {
+        if (Test-KeyAuth $keyPath) {
+            $script:KeyPath = $keyPath
+            $script:UseKey = $true
+            Ok 'La TV acepta la llave de seguridad (KEY SERVER)'
+            break
+        }
+        Info 'La llave se descifro, pero la TV no la autoriza.'
+    }
+    Fail 'La TV ha rechazado esa clave.'
+    Info 'Escribela otra vez con cuidado: no se ve al escribir.'
+    if ($intentosPass -ge 2) {
+        Info 'Tiene que ser la que muestra la app Developer Mode, tal cual.'
+    }
+    $tvPass = ''
 }
 Write-Host ''
 
+$authArgs = @(Get-AuthArgs)
+$stdinPass = $null
+if (-not $script:UseKey) { $stdinPass = $tvPass }
+
 $scpArgs = @('-P', "$Port")
 if ($script:ScpLegacy) { $scpArgs = @('-O') + $scpArgs }
-$scpArgs = $scpArgs + $script:SshOpts + @($ipkPath, ($TvUser + '@' + $TvHost + ':' + $remoteIpk))
-Invoke-Native 'scp' $scpArgs $tvPass
+$scpArgs = $scpArgs + $script:SshOpts + $authArgs + @($ipkPath, ($TvUser + '@' + $TvHost + ':' + $remoteIpk))
+Invoke-Native 'scp' $scpArgs $stdinPass
 if ($script:LastExit -ne 0) {
     $diag = Get-SshDiagnosis
     if ($diag -match 'timed out|No route to host|Connection refused|Network is unreachable|Could not resolve') {
@@ -696,8 +797,8 @@ if ($script:LastExit -ne 0) {
     $remoteIpk = "$remoteDir/" + $ipkItem.Name
     $scpArgs = @('-P', "$Port")
     if ($script:ScpLegacy) { $scpArgs = @('-O') + $scpArgs }
-    $scpArgs = $scpArgs + $script:SshOpts + @($ipkPath, ($TvUser + '@' + $TvHost + ':' + $remoteIpk))
-    Invoke-Native 'scp' $scpArgs $tvPass
+    $scpArgs = $scpArgs + $script:SshOpts + $authArgs + @($ipkPath, ($TvUser + '@' + $TvHost + ':' + $remoteIpk))
+    Invoke-Native 'scp' $scpArgs $stdinPass
     if ($script:LastExit -ne 0) {
         Explain-SshError (Get-SshDiagnosis)
         Pause-End
@@ -785,11 +886,11 @@ $utf8 = New-Object System.Text.UTF8Encoding($false)
 
 $scpArgs = @('-P', "$Port")
 if ($script:ScpLegacy) { $scpArgs = @('-O') + $scpArgs }
-$scpArgs = $scpArgs + $script:SshOpts + @(
+$scpArgs = $scpArgs + $script:SshOpts + $authArgs + @(
     $localSh, $localJson, $localLaunch,
     ($TvUser + '@' + $TvHost + ':' + $remoteDir + '/')
 )
-Invoke-Native 'scp' $scpArgs $tvPass
+Invoke-Native 'scp' $scpArgs $stdinPass
 if ($script:LastExit -ne 0) {
     Explain-SshError (Get-SshDiagnosis)
     Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
@@ -797,11 +898,13 @@ if ($script:LastExit -ne 0) {
     exit 1
 }
 
-$sshArgs = @('-p', "$Port") + $script:SshOpts + @(($TvUser + '@' + $TvHost), ('sh ' + $remoteShPath))
-Invoke-Native 'ssh' $sshArgs $tvPass
+$sshArgs = @('-p', "$Port") + $script:SshOpts + $authArgs + @(($TvUser + '@' + $TvHost), ('sh ' + $remoteShPath))
+Invoke-Native 'ssh' $sshArgs $stdinPass
 $installExit = $script:LastExit
 
 Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
+# La clave descifrada solo hace falta mientras se instala: se borra ya.
+Remove-TvKey
 
 Line
 if ($installExit -eq 0) {
