@@ -107,11 +107,14 @@ Pensado para quien solo tiene el archivo y no quiere tocar una terminal:
 2. Extráela y haz **doble clic en `INSTALAR-XUPERTV.bat`**.
 3. Escribe la **IP** del televisor y la **clave** que muestra la app
    *Developer Mode* (la pide dos veces: es normal).
+   Si no sabes la IP —o ha cambiado al reiniciar la TV— escribe **`B`** y el
+   instalador la busca solo en tu red local (puerto 22).
 4. Espera a que diga **LISTO**: la app se abre sola en la TV.
 
 No hace falta Node.js ni `ares-cli`: usa el cliente SSH que ya trae Windows
 10/11. El instalador sube el IPK, lo instala con el servicio de webOS, verifica
-la versión, comprueba que `ffmpeg` quedó ejecutable y abre la app.
+la versión, comprueba que `ffmpeg` quedó ejecutable y abre la app. También avisa
+si el PC y la TV están en redes distintas.
 
 - Guía visual paso a paso (se abre sin internet, incluye **modo presentación**
   para grabar): [`docs/instalar/index.html`](docs/instalar/index.html)
