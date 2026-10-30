@@ -1,71 +1,132 @@
-# Instrucciones para instalar, probar y desinstalar WebOSFlux
+# Instalación, actualización y desinstalación
+
+Guía para instalar **XuperTV para LG webOS** (`com.webosflux.xuptertv.fidelity`)
+en un televisor LG con webOS 4. Probado en un **LG 43LM6300PDB con webOS
+4.10.2-29**.
 
 ## Requisitos
-- LG 43LM6300PDB con webOS 4.10.2-29
-- PC conectado a la misma red WiFi que el televisor
-- Modo Desarrollador activado en el televisor (Developer Mode)
 
-## Activar Developer Mode
-1. Abrir la aplicación LG Content Store / Developer Mode en el televisor (o instalarla desde la tienda si no está presente)
-2. Iniciar sesión con cuenta LG Developer
-3. Activar Developer Mode
-4. El televisor reiniciará
+- Televisor LG con **webOS 4.0 o superior** conectado a la red.
+- PC en la misma red, con **Node.js 18+** y `@webos-tools/cli`:
 
-## Configurar ares-cli con el televisor
-En el PC:
+  ```bash
+  npm i -g @webos-tools/cli
+  ```
+
+- IPK generado con `tools/build-ipk.ps1` (ver «Compilar» en el README) o
+  descargado de la sección *Releases*.
+- Modo desarrollador activo en el televisor.
+
+## 1. Activar el modo desarrollador
+
+1. Instala la app **Developer Mode** desde la LG Content Store.
+2. Inicia sesión con una cuenta LG Developer y activa el modo.
+3. El televisor se reinicia y muestra una IP y un puerto (normalmente 22).
+
+> El modo desarrollador caduca a las 50 horas. Cuando caduca, `ares-install`
+> deja de autenticar: vuelve a la app y renueva la sesión.
+
+## 2. Registrar el televisor en ares
 
 ```bash
 ares-setup-device
 ```
 
-Seguir las instrucciones para añadir el televisor. Anotar la IP del televisor.
+- `Device name`: por ejemplo `tv`
+- `host`: la IP que muestra la app Developer Mode
+- `port`: `22`
+- `username`: `prisioner` (así, sin la «o»)
+- `password`: la clave que muestra la app
 
-Ver dispositivos:
+Comprueba la conexión e instala la clave SSH (evita pedir contraseña en cada
+comando):
+
 ```bash
-ares-device-info -d <nombre_dispositivo>
+ares-device-info --device tv
+ares-novacom --device tv --getkey
 ```
 
-## Instalar la aplicación
-Desde el directorio `webos/` o desde donde esté el IPK:
+## 3. Instalar el IPK
 
 ```bash
-ares-install com.webosflux.xuptertv_1.0.0_all.ipk -d <nombre_dispositivo>
+ares-install --device tv dist/com.webosflux.xuptertv.fidelity_1.5.9_all.ipk
+ares-launch  --device tv com.webosflux.xuptertv.fidelity
 ```
 
-## Lanzar la aplicación
+El IPK ya contiene la web app, el servicio Luna y el binario FFmpeg: no hay
+que instalar nada más en el televisor.
+
+### Si `ares-install` falla después de subir
+
+En algunos webOS 4 el paquete se sube pero los pasos `ls`/`md5` posteriores no
+responden y `ares-install` termina con error. Usa el instalador directo del
+repositorio (SFTP + Luna):
+
 ```bash
-ares-launch com.webosflux.xuptertv_1.0.0_all.ipk -d <nombre_dispositivo>
+# Windows PowerShell
+$env:TV_HOST="192.168.1.50"; $env:TV_PASS="tu_clave"
+node tools/tv_deploy.mjs dist\com.webosflux.xuptertv.fidelity_1.5.9_all.ipk
 ```
 
-O desde el menú de aplicaciones del televisor buscar "WebOSFlux".
-
-## Desinstalar la aplicación
 ```bash
-ares-install -d <nombre_dispositivo> -r com.webosflux.xuptertv
+# Linux / macOS
+TV_HOST=192.168.1.50 TV_PASS=tu_clave \
+  node tools/tv_deploy.mjs dist/com.webosflux.xuptertv.fidelity_1.5.9_all.ipk
 ```
 
-## Probar navegación con control remoto
-- Flechas (Arriba/Abajo/Izquierda/Derecha): Navegar entre menús y elementos
-- OK/Enter: Seleccionar
-- Back/Volver: Salir del reproductor o volver
+Sube el IPK a `/media/developer/temp/` y llama a
+`luna://com.webos.appInstallService/dev/install`. Debe terminar con
+`"state":"installed"`.
 
-## Funcionalidades de esta fase
-- Pantallas: Inicio, TV en vivo, Películas, Series, Búsqueda, Configuración (con datos de prueba propios)
-- Navegación D-pad completa
-- Gestión de foco
-- Reproductor HTML5 con vídeo público de prueba (sin DRM)
-- Sin dependencias externas pesadas, compatible con Chromium 53
+## 4. Verificar la instalación
 
-## Limitaciones no comprobadas aún
-- Reproducción HLS nativa en Chromium 53 de webOS 4 (no se ha probado en televisor real)
-- Soporte MSE/DASH (evaluar caso por caso)
-- Rendimiento con contenido real
-- Comportamiento exacto de teclas en este modelo
-- APIs Luna (no utilizadas en esta fase)
+Servicio vivo (debe responder `returnValue: true`):
+
+```bash
+node tools/tv_luna.mjs luna://com.webosflux.xuptertv.fidelity.service/ping
+```
+
+FFmpeg ejecutable (necesario para el «Modo fluido»):
+
+```bash
+node tools/tv_exec.mjs "ls -l /media/developer/apps/usr/palm/services/com.webosflux.xuptertv.fidelity.service/ffmpeg"
+```
+
+Esperado: `-rwxr-xr-x`. Si sale `-rw-r--r--`, reinstala el IPK generado por
+`tools/build-ipk.ps1` (el script reescribe `data.tar.gz` para conservar el
+permiso) o ejecuta `chmod 755` sobre esa ruta.
+
+## 5. Actualizar
+
+Instala el nuevo IPK con el mismo comando: reemplaza la versión anterior y
+conserva los datos locales (ajustes, historial, listas).
+
+```bash
+ares-install --device tv dist/com.webosflux.xuptertv.fidelity_<versión>_all.ipk
+```
+
+## 6. Desinstalar
+
+```bash
+ares-install --device tv --remove com.webosflux.xuptertv.fidelity
+```
+
+## Uso con el mando
+
+| Tecla | Acción |
+|---|---|
+| Flechas | Navegar entre pestañas, filas, canales y categorías |
+| OK / Enter | Seleccionar, reproducir, filtrar categoría |
+| Back | Volver; cierra paneles y diálogos |
+| Arriba (en el panel de canales) | Abrir el selector con las 38 categorías |
+| Izquierda (en TV en vivo) | Abrir el panel de canales |
+| Abajo (en VOD) | Abrir «Ajuste de reproducir» |
 
 ## Notas
-- NO se ha modificado el APK original
-- NO se han copiado recursos propietarios
-- NO se han usado endpoints/credenciales del APK
-- NO se ha intentado eludir DRM o autenticación
-- Instalación NO realizada por el agente - requiere autorización del usuario
+
+- La app no incluye contenido: usa el catálogo y los canales que devuelve el
+  portal en tiempo de ejecución.
+- No se modifica el APK original, no se elude DRM ni autenticación y no se
+  extraen credenciales de otras aplicaciones.
+- Si el televisor cambia de IP, actualiza el dispositivo con
+  `ares-setup-device --modify tv`.

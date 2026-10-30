@@ -1,165 +1,367 @@
-# XuperTV para LG webOS 4 — estado real del port
+<div align="center">
 
-Reconstrucción en HTML/CSS/JavaScript para LG webOS 4.10.2-29 (Chromium 53) a
-1920×1080. El trabajo de fidelidad vive en [`webos/fidelity`](webos/fidelity);
-el prototipo anterior bajo `webos/` se mantiene separado y **no** representa el
-estado actual.
+# XuperTV para LG webOS
 
-## Estado
+**Port nativo de XuperTV 4.34.4 a televisores LG webOS 4** — HTML/CSS/JS sobre
+Chromium 53, catálogo real del portal, TV en vivo con categorías y reproducción
+con relay FFmpeg integrado.
 
-Implementado y verificable en navegador:
+![webOS 4](https://img.shields.io/badge/webOS-4.x-a50034?style=flat-square&logo=lg&logoColor=white)
+![Chromium 53](https://img.shields.io/badge/Chromium-53-4285F4?style=flat-square&logo=googlechrome&logoColor=white)
+![1920x1080](https://img.shields.io/badge/render-1920%C3%971080-0b7285?style=flat-square)
+![versión](https://img.shields.io/badge/IPK-1.5.9-c91923?style=flat-square)
+![licencia](https://img.shields.io/badge/c%C3%B3digo-MIT-2ea44f?style=flat-square)
 
-- Bienvenida, inicio con 7 pestañas (TV, Destacados, Película, Series, Gratis,
-  Kids, 4K UHD), detalle VOD, búsqueda, ajustes y reproductor.
-- Navegación con D-pad, foco visible y retroceso.
-- Catálogo VOD funcional de extremo a extremo con una muestra local:
-  catálogo → inicio → detalle → búsqueda → reproductor `<video>`.
-- Barra del reproductor con auto-ocultado a los 5 s y reaparición con el mando.
-- Recursos originales de la APK (141 archivos) inventariados y reutilizados.
+[Instalación](#instalación-en-el-televisor) ·
+[Compilar](#compilar-el-ipk) ·
+[Arquitectura](#arquitectura) ·
+[Desarrollo local](#desarrollo-local) ·
+[Problemas frecuentes](#problemas-frecuentes) ·
+[Contribuir](#contribuir)
 
-No implementado o no verificado:
+</div>
 
-- Comparación píxel a píxel contra capturas de XuperTV en Android TV: **no
-  existe**. La comparación actual es contra la geometría de los layouts, no
-  contra el original en pantalla.
-- Pruebas en el televisor LG 43LM6300PDB.
-- Barra VOD original (`MFInfoBar`), marquesina de botones del detalle,
-  episodios de series, paneles Account/Purchase, flujo de contraseña parental.
-- Catálogo real de XuperTV (requiere sesión/terminal autorizado).
+![Inicio con el catálogo real](docs/screenshots/home.jpg)
 
-Por eso **no se afirma fidelidad total ni compatibilidad de reproducción en el
-televisor**. El detalle está en
+---
+
+## Qué es esto
+
+Una reconstrucción del cliente **XuperTV 4.34.4** (`com.xuper.netxxus`) para
+televisores LG con webOS 4. No es un emulador ni un wrapper: la interfaz está
+reescrita en HTML/CSS/JavaScript pensada para el motor Chromium 53 del
+televisor, y un servicio Node propio habla el protocolo cifrado del portal
+Magis para traer catálogo, búsqueda, detalle, canales en vivo y URLs de
+reproducción.
+
+El objetivo es que en un LG de 2019 se sienta como la app de Android TV:
+misma disposición, mismos recursos gráficos, mismo mando a distancia.
+
+| | |
+|---|---|
+| **Probado en** | LG 43LM6300PDB · webOS 4.10.2-29 · 1920×1080 |
+| **ID de paquete** | `com.webosflux.xuptertv.fidelity` |
+| **Versión actual** | `1.5.9` |
+| **Runtime** | Chromium 53 (web app) + Node antiguo del TV (servicio) |
+| **Dependencias en el TV** | ninguna: FFmpeg viaja dentro del IPK |
+
+## Estado actual
+
+| Área | Estado |
+|---|---|
+| Inicio, 7 pestañas, detalle, búsqueda, ajustes | ✅ funcionando con datos reales |
+| TV en vivo (1 000+ canales, 38 categorías) | ✅ funcionando, con filtro por categoría |
+| Reproductor VOD (HLS/TS/MP4) | ✅ funcionando |
+| Audio y subtítulos reales del portal | ✅ selector en el panel y en «Ajuste de reproducir» |
+| Series: temporadas y episodios | ✅ navegador tipo Netflix dentro del reproductor |
+| «Modo fluido» (relay FFmpeg local) | ✅ para HEVC/TS; por título, no se filtra entre películas |
+| Modo desarrollador / instalación por IPK | ✅ |
+| Comparación píxel a píxel con Android TV | ⚠️ pendiente de referencias verificables |
+| DRM, geobloqueo, control parental del portal | ❌ fuera de alcance (no se elude nada) |
+
+Detalle fino de lo que falta en
 [`DIFERENCIAS_PENDIENTES.md`](webos/fidelity/DIFERENCIAS_PENDIENTES.md).
 
-No es una release final. Existe una **build de prueba 1.1.1** generada a
-petición del usuario para instalar en el televisor:
+## Capturas
 
-| Dato | Valor |
-| --- | --- |
-| Archivo | `dist/com.webosflux.xuptertv.fidelity_1.1.1_all.ipk` |
-| Tamaño | 2 266 776 bytes (2,16 MB) |
-| SHA-256 | `B3E7C1F0A283A1B97E4A85C8F37910E71D63EA97D2DFF58A35B5D3D971122953` |
+| TV en vivo · panel de canales | Categorías (38 columnas del portal) |
+|---|---|
+| ![Panel de canales](docs/screenshots/live-panel.png) | ![Categorías](docs/screenshots/live-categories.png) |
 
-Contiene el port completo (código, catálogo local, 141 recursos originales) y
-se verificó sirviendo la copia empaquetada: 9 pantallas sin errores de consola,
-0 imágenes rotas, catálogo con 6 películas. El IPK de `webos/fidelity/` sigue
-siendo el artefacto antiguo
-([`AUDITORIA_IPK.md`](webos/fidelity/AUDITORIA_IPK.md)).
+| Canales filtrados por «Deportes» | Búsqueda real |
+|---|---|
+| ![Deportes](docs/screenshots/live-panel-filtered.png) | ![Búsqueda](docs/screenshots/search.jpg) |
+
+## Funcionalidades
+
+- **Inicio con 7 pestañas** (TV, Destacados, Película, Series, Kids, Anime,
+  Explorar) y carrusel destacado, con el catálogo real del portal.
+- **TV en vivo**: lista lateral de canales, rail de categorías, selector a
+  pantalla completa con las 38 columnas del portal y filtrado real por
+  categoría. El canal que suena no se corta al filtrar.
+- **Detalle VOD**: sinopsis, reparto, géneros, temporadas, episodios y
+  recomendaciones; el botón «Idioma» abre el mismo diálogo de audio/subtítulos
+  que el reproductor.
+- **Reproductor**: barra con auto-ocultado, seek, pausa, salto ±10 s, panel de
+  ajustes, cambio de audio por el relay y subtítulos por el proxy local.
+- **Series**: navegador de episodios a pantalla completa; elegir el episodio 6
+  reproduce el episodio 6 y el detalle queda sincronizado al volver.
+- **«Modo fluido»**: por título (`seriesId || id`), por defecto **No**; una
+  película no hereda el modo de otra y una serie lo conserva entre episodios.
+- **Búsqueda** con teclado en pantalla, historial y resultados paginados.
+- **Ajustes**: cuenta local, mi lista, compartir, bloqueo, configuración global,
+  ayuda y «sobre nosotros».
+- **Navegación completa con D-pad**, foco visible, botón Back y atajos de mando.
+- **Sin dependencias externas en el televisor**: el binario FFmpeg (7.0.2 armhf,
+  estático) se instala junto con la app.
 
 ## Instalación en el televisor
 
-```powershell
-ares-install -d webosfidelity dist\com.webosflux.xuptertv.fidelity_1.1.1_all.ipk
-ares-launch  -d webosfidelity com.webosflux.xuptertv.fidelity
+Requisitos:
+
+- LG con **webOS 4.0 o superior** (probado en 4.10.2-29) y 1 GB de RAM.
+- PC en la misma red que el televisor.
+- [Node.js 18+](https://nodejs.org/) y `@webos-tools/cli`:
+  ```bash
+  npm i -g @webos-tools/cli
+  ```
+- Modo desarrollador activado en el televisor (app **Developer Mode** de LG,
+  sesión con cuenta LG Developer, reinicio).
+
+### 1. Emparejar el televisor
+
+```bash
+ares-setup-device            # añade el TV por IP; usuario: prisioner
+ares-novacom --device tv --getkey   # instala la clave SSH
+ares-device-info --device tv
 ```
 
-Requiere un dispositivo configurado con clave SSH válida (Modo Desarrollador y
-`ares-novacom -k`, o clave pública en el televisor). Si `ares-install` falla por
-autenticación, el problema es el acceso SSH, no el IPK. También se puede
-instalar desde un USB con el explorador de apps si el televisor lo permite.
+### 2. Instalar el IPK
 
-## Documentación del port
-
-| Documento | Contenido |
-| --- | --- |
-| [`MAPA_PANTALLAS.md`](webos/fidelity/MAPA_PANTALLAS.md) | Pantalla → layout → recursos → clases CSS/JS |
-| [`COMPARACION_VISUAL.md`](webos/fidelity/COMPARACION_VISUAL.md) | Medidas XML vs render 1920×1080 |
-| [`DIFERENCIAS_PENDIENTES.md`](webos/fidelity/DIFERENCIAS_PENDIENTES.md) | Todo lo que falta, con motivo y condición de cierre |
-| [`PLAN_CORRECCION.md`](webos/fidelity/PLAN_CORRECCION.md) | Fases para cerrar diferencias y empaquetar |
-| [`INVENTARIO_RECURSOS.md`](webos/fidelity/INVENTARIO_RECURSOS.md) | Recursos originales y procedencia |
-| [`INTEGRACION_PELICULAS.md`](webos/fidelity/INTEGRACION_PELICULAS.md) | Contrato del catálogo y límites |
-| [`AUDITORIA_IPK.md`](webos/fidelity/AUDITORIA_IPK.md) | Auditoría del IPK y del APK |
-
-Capturas actuales: [`webos/fidelity/shots`](webos/fidelity/shots) (1920×1080).
-
-## Catálogo de películas
-
-El pipeline funciona hoy con un **catálogo local de muestra** de 6 películas
-abiertas (dominio público / Creative Commons), pensado para demostrar el flujo
-completo sin usar contenido ni sesiones de XuperTV:
-
-```
-data/catalog.js → loadVodCatalog() → VOD[] → Inicio / Detalle / Búsqueda / Reproductor
+```bash
+ares-install --device tv dist/com.webosflux.xuptertv.fidelity_1.5.9_all.ipk
+ares-launch  --device tv com.webosflux.xuptertv.fidelity
 ```
 
-- `config/api.js` arranca en `mode:'catalog'` con `useBundledCatalog:true` y
-  `baseUrl:''`.
-- `data/catalog.js` aporta póster local y `streamUrl` reproducible.
-- Si se configura un backend y falla, se usa el catálogo local y la interfaz no
-  queda vacía.
-- Estado en consola: `window.__xuper.api` (`source`: `bundled`, `api` o
-  `bundled-fallback`), `window.__xuper.vod`, `window.__xuper.reloadVod()`.
+Si `ares-install` falla **después** de subir el paquete (pasa en algunos
+webOS 4: el `ls`/`md5` posterior al upload no responde), usa el instalador
+directo por SSH + Luna que incluye el repo:
 
-Para conectar un backend autorizado, edita
-[`webos/fidelity/config/api.js`](webos/fidelity/config/api.js):
-
-```js
-window.XUPERTV_API = {
-  enabled: true,
-  mode: 'catalog',              // 'catalog' | 'xuper'
-  useBundledCatalog: true,
-  baseUrl: 'https://mi-backend.example',
-  catalogPath: '/v1/catalog',
-  searchPath: '/v1/search?q={query}',
-  detailPath: '/v1/items/{id}',
-  imageBaseUrl: 'https://cdn.example/posters/',
-  headers: {},                  // sin secretos en el repositorio
-  timeoutMs: 10000
-};
+```bash
+TV_HOST=192.168.1.50 TV_PASS=tu_clave node tools/tv_deploy.mjs dist/com.webosflux.xuptertv.fidelity_1.5.9_all.ipk
 ```
 
-La app usa `XMLHttpRequest` (no `fetch`) para conservar Chromium 53. La
-respuesta puede ser un array o contener el array en `items`, `movies`,
-`results`, `recommendList`, `movieList`, `totalMovieList`, `programList` o
-`data`. Los campos se normalizan (título, póster, fondo, puntuación, año,
-duración, géneros, director, actores, sinopsis, stream). Contrato completo en
-[`INTEGRACION_PELICULAS.md`](webos/fidelity/INTEGRACION_PELICULAS.md).
+`tv_deploy.mjs` sube el IPK por SFTP a `/media/developer/temp/` y llama a
+`com.webos.appInstallService/dev/install`. Es el camino que se usa a diario en
+este proyecto porque es el único estable en el televisor de pruebas.
 
-### Modo `xuper`
+### 3. Comprobar que el relay quedó ejecutable
 
-`mode:'xuper'` queda documentado pero **no operativo**: exige una sesión
-emitida por el proveedor para este cliente. El port no lee tokens del APK, no
-intercepta TLS y no reutiliza credenciales de otra app. Sin sesión válida no se
-hace la petición y se registra el motivo en `window.__xuper.api.error`.
+El empaquetado en Windows puede perder el bit de ejecución de FFmpeg. El script
+de build lo repara (`tools/fix_ipk_modes.py`), pero si el «Modo fluido» no
+arranca, verifícalo:
 
-## Ejecutar localmente
+```bash
+node tools/tv_exec.mjs "ls -l /media/developer/apps/usr/palm/services/com.webosflux.xuptertv.fidelity.service/ffmpeg"
+# esperado: -rwxr-xr-x
+```
 
-Desde `webos/fidelity`:
+Si aparece `-rw-r--r--`, reinstala el IPK generado con
+`tools/build-ipk.ps1` (o aplica `chmod 755` por SSH).
 
-```powershell
+Guía extendida, desinstalación y notas de red:
+[`webos/INSTRUCCIONES_INSTALACION.md`](webos/INSTRUCCIONES_INSTALACION.md).
+
+## Compilar el IPK
+
+```bash
+git clone https://github.com/cristianco7/XUPER-HYDRA-PORT-WEBOS.git
+cd XUPER-HYDRA-PORT-WEBOS
+
+# Windows (PowerShell): restaura FFmpeg si falta, empaqueta app + servicio y
+# reescribe data.tar.gz para conservar el bit 0755 del binario.
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-ipk.ps1
+
+# Linux/macOS
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/setup-ffmpeg.ps1 2>/dev/null || \
+  tar -xJf tools/vendor/ffmpeg-7.0.2-armhf-static.tar.xz -C /tmp
+ares-package webos/fidelity webos/services/com.webosflux.xuptertv.fidelity.service -o dist -e shots -e '*.md'
+python3 tools/fix_ipk_modes.py dist/com.webosflux.xuptertv.fidelity_1.5.9_all.ipk
+```
+
+Salida de referencia (build 1.5.9):
+
+| Dato | Valor |
+|---|---|
+| Archivo | `dist/com.webosflux.xuptertv.fidelity_1.5.9_all.ipk` |
+| Tamaño | 22 458 886 bytes (21,4 MiB) |
+| SHA-256 | `4C2690A2E450252DC7E4FEDF727B7CDA12B29DAA04CC6168FA4AA6BAD2A6352A` |
+
+El IPK incluye la web app, el servicio Luna, `ffmpeg` (31,8 MB) y
+`ffmpeg-LICENSE.txt`. Por eso pesa ~22 MB: es una instalación de un solo paso,
+sin descargas en el televisor.
+
+## Arquitectura
+
+```
+┌──────────────────────────── televisor LG (webOS 4) ────────────────────────────┐
+│                                                                                │
+│  com.webosflux.xuptertv.fidelity            (web app · Chromium 53)            │
+│  ├─ index.html + css/style.css              pantallas y foco D-pad             │
+│  ├─ js/app.js                               navegación, panel, reproductor     │
+│  ├─ data/portal.js                          snapshot del catálogo (pinta ya)   │
+│  └─ config/api.js                           modo portal / estático / backend   │
+│                    │  Luna (webOS.service)                                     │
+│                    ▼                                                           │
+│  com.webosflux.xuptertv.fidelity.service    (Node del TV · ES5)                │
+│  ├─ magis.js        3DES + POST /api/portalCore  (home, search, detail,        │
+│  │                  resolve, liveCategories, liveChannels, resolveLive)        │
+│  ├─ proxy.js        proxy loopback para HLS/TS y subtítulos                    │
+│  ├─ ffmpeg-relay.js relay local: TS/HEVC → fMP4 (hvc1) para «Modo fluido»      │
+│  ├─ ts-indexer.js   índice de segmentos para seek                              │
+│  └─ ffmpeg          binario 7.0.2 armhf estático (GPLv3)                       │
+│                                                                                │
+└────────────────────────────────────────────────────────────────────────────────┘
+                    │ HTTPS (protocolo del portal, sesión anónima)
+                    ▼
+             portal Magis de XuperTV
+```
+
+Puntos clave:
+
+- El portal **no manda cabeceras CORS** y el cuerpo va cifrado
+  (`hex(base64(3DES-EDE/ECB/PKCS7(JSON)))`), así que el protocolo vive en el
+  servicio Node, nunca en la página.
+- La página pinta al instante con `data/portal.js` y luego refresca desde el
+  servicio; búsqueda, detalle y `resolve` siempre van en vivo.
+- `resolve` devuelve `{base}/vod/{mediaId}_media.{ts|mp4}`. Los TS se sirven a
+  través del proxy loopback como HLS; el «Modo fluido» añade el relay FFmpeg
+  para que el decodificador del TV reciba fMP4 en lugar de MPEG-TS.
+- En el televisor no se descarga nada: FFmpeg y el servicio viajan en el IPK.
+
+## Desarrollo local
+
+La app detecta `?service=http://127.0.0.1:8910` y usa un espejo HTTP del
+servicio en lugar de Luna, así que se puede trabajar en el PC con Chromium.
+
+```bash
+# terminal 1 — espejo del servicio (catálogo, vivo, resolve, proxy de medios)
+node tools/dev_service.mjs 8910
+
+# terminal 2 — web app
+cd webos/fidelity
 python -m http.server 8899 --bind 127.0.0.1
 ```
 
-Abre `http://127.0.0.1:8899/index.html`. Enlaces de prueba:
+Abre `http://127.0.0.1:8899/index.html?service=http://127.0.0.1:8910`.
+
+Enlaces directos:
 
 ```
 ?screen=welcome
 ?screen=home&tab=0..6
 ?screen=detail&vod=1
-?screen=search&q=sintel
-?screen=settings&panel=0..5
-?screen=player
-?screen=player&channels=1
-?screen=player&mode=vod&vod=1
+?screen=search&q=dragon
+?screen=settings&panel=0..6
+?screen=player                       (TV en vivo)
+?screen=player&channels=1            (panel de canales abierto)
+?screen=player&mode=vod&vod=3        (VOD)
 ```
 
-## Análisis de origen
+Consola del navegador (`window.__xuper`):
 
-- APK sin modificar: `analysis/xuppertv/apk/Xuper.apk`
-  (SHA-256 `e70ce12782eec9f43393b69d88e2d243d8812ae38d2acf08856baa877c1ab856`).
-- Paquete `com.xuper.netxxus`, versión `4.34.4` (`43404`).
-- Informes 01–07 en `analysis/xuppertv/reports/`.
-- Recursos decodificados en `analysis/xuppertv/decoded/resources/`.
-- El APK no se ejecuta, no se parchea y no se vuelve a firmar.
+```js
+__xuper.state                  // pantalla, foco, canal, episodio, modo…
+__xuper.vod                    // catálogo cargado
+__xuper.channels               // canales en vivo del portal
+__xuper.service('search', {value: 'dragon'}, console.log)
+__xuper.key(38)                // simula una tecla del mando
+__xuper.show('player')
+__xuper.openPlayer('vod', 3)
+```
 
-## Límites
+> En Chromium de escritorio no hay decodificador H.265: el vídeo real solo se
+> valida en el televisor. Todo lo demás (foco, filtros, listas, paneles) se
+> puede probar en el PC.
 
-- El host y la sesión de XuperTV se resuelven en runtime; no están fijos en el
-  APK y no se han extraído.
-- No hay elusión de DRM, geobloqueo, autenticación ni control parental.
-- Falta validar red/CORS, códecs y HLS en el LG 43LM6300PDB.
-- Falta la comparación visual obligatoria con referencias verificables de
-  Android TV.
+## Modo fluido (relay FFmpeg)
 
-Los próximos pasos están en
-[`PLAN_CORRECCION.md`](webos/fidelity/PLAN_CORRECCION.md).
+Algunos VOD del portal llegan en MPEG-TS con HEVC y el reproductor de webOS 4
+los entrecorta. El «Modo fluido» arranca un FFmpeg local que copia los streams
+(`-c copy`) a un fMP4 con etiqueta `hvc1` y lo sirve en
+`http://127.0.0.1:8787/s/<token>.mp4`.
+
+- Se elige **por título**: `smoothModeByTitle[seriesId || id]`, por defecto
+  **No**. Una película no hereda el ajuste de otra y una serie lo mantiene
+  entre episodios.
+- Solo se activa para HEVC/TS; el resto usa el proxy directo.
+- El audio se cambia a través del relay (`&a=<índice>`) porque el pipeline
+  nativo no permite cambiar de pista en caliente.
+- Si FFmpeg no está o no es ejecutable, el modo fluido falla y se ve el aviso
+  de stream; revisa el paso 3 de la instalación.
+
+Contrato que **no se debe romper** al tocar la app (está descrito en
+[`AGENTS.md`](AGENTS.md)): Normal usa el proxy directo; Modo Fluido usa
+obligatoriamente `resolveSmooth` y una URL local `127.0.0.1:8787/s/<token>.mp4`.
+
+## Estructura del repositorio
+
+```
+webosflux/
+├─ webos/
+│  ├─ fidelity/                     app web final (la que se empaqueta)
+│  │  ├─ index.html, css/, js/, data/, config/, assets/, images/
+│  │  └─ *.md                       auditoría, mapa de pantallas, diferencias…
+│  ├─ services/                     servicio Luna + FFmpeg + proxy + relay
+│  └─ …                             prototipo antiguo (histórico, no es la app)
+├─ tools/
+│  ├─ build-ipk.ps1                 build de un paso (app + servicio + modos)
+│  ├─ setup-ffmpeg.ps1              restaura el binario desde tools/vendor
+│  ├─ fix_ipk_modes.py              fuerza 0755 en ffmpeg dentro del IPK
+│  ├─ dev_service.mjs               espejo HTTP del servicio para el PC
+│  ├─ tv_deploy.mjs                 sube e instala el IPK por SFTP + Luna
+│  ├─ tv_exec.mjs / tv_luna.mjs     utilidades SSH para depurar el televisor
+│  ├─ ssh2-loader.mjs               localiza ssh2 sin rutas absolutas
+│  └─ vendor/                       FFmpeg 7.0.2 armhf estático (tar.xz)
+├─ docs/screenshots/                capturas usadas en este README
+└─ dist/                            IPKs generados (no versionados)
+```
+
+## Documentación
+
+| Documento | Contenido |
+|---|---|
+| [`webos/fidelity/README_FIDELITY.md`](webos/fidelity/README_FIDELITY.md) | Estado del port y estructura interna |
+| [`webos/fidelity/MAPA_PANTALLAS.md`](webos/fidelity/MAPA_PANTALLAS.md) | Pantalla → layout del APK → recursos → CSS/JS |
+| [`webos/fidelity/COMPARACION_VISUAL.md`](webos/fidelity/COMPARACION_VISUAL.md) | Medidas XML frente al render 1920×1080 |
+| [`webos/fidelity/DIFERENCIAS_PENDIENTES.md`](webos/fidelity/DIFERENCIAS_PENDIENTES.md) | Lo que falta, con motivo y condición de cierre |
+| [`webos/fidelity/INVENTARIO_RECURSOS.md`](webos/fidelity/INVENTARIO_RECURSOS.md) | Recursos originales y procedencia |
+| [`webos/fidelity/AUDITORIA_IPK.md`](webos/fidelity/AUDITORIA_IPK.md) | Auditoría del IPK y del APK |
+| [`webos/INSTRUCCIONES_INSTALACION.md`](webos/INSTRUCCIONES_INSTALACION.md) | Instalación paso a paso y desinstalación |
+| [`AGENTS.md`](AGENTS.md) | Reglas del proyecto (zona protegida de reproducción) |
+
+## Problemas frecuentes
+
+| Síntoma | Causa y solución |
+|---|---|
+| `ares-install` termina con error tras subir | `ls`/`md5` posterior al upload falla en webOS 4. Usa `node tools/tv_deploy.mjs <ipk>`. |
+| «No se pudo abrir el stream» en todos los canales | El servicio no está corriendo o el portal no responde. Comprueba `node tools/tv_luna.mjs luna://com.webosflux.xuptertv.fidelity.service/ping`. |
+| El Modo fluido no arranca | `ffmpeg` sin permiso de ejecución (paso 3) o relay ocupado; mira los logs del servicio. |
+| Pantalla en negro al abrir la app | IPK antiguo o instalación a medias: reinstala la versión actual y lanza con `ares-launch`. |
+| Los canales no filtran / no se puede ir a las categorías | Versión < 1.5.9. En 1.5.9 el rail conserva el foco y **Arriba** abre el selector de las 38 categorías. |
+| «Unexpected token» en el servicio | Algún JSON se guardó con BOM; el Node del televisor no lo tolera. Guarda sin BOM. |
+| El TV no aparece en `ares-device-info` | Modo desarrollador caducado (hay que renovarlo cada 50 h) o IP cambiada. |
+
+## Contribuir
+
+Las contribuciones son bienvenidas: informes de fallos en otros modelos LG,
+capturas de referencia de Android TV, mejoras de foco/accesibilidad y
+correcciones de compatibilidad con Chromium 53.
+
+Antes de enviar un PR:
+
+1. `node --check` sobre cada `.js` tocado.
+2. Probar en `http://127.0.0.1:8899` con `?service=http://127.0.0.1:8910`.
+3. **No** tocar la zona protegida de reproducción (`streamMode`, `forceRelay`,
+   `resolveSmooth`, `restartCurrentPlayback`, `playUrl`, seek, cambio de
+   episodio) sin autorización explícita: está documentada en
+   [`AGENTS.md`](AGENTS.md).
+4. Si cambias versión, sube a la vez `webos/fidelity/appinfo.json` y
+   `webos/services/…/package.json` (el build avisa si no coinciden).
+
+## Aviso legal y licencia
+
+- Proyecto **no oficial**, sin relación con XuperTV ni con LG. No incluye ni
+  aloja contenido audiovisual: reproduce lo que el portal autorizado del
+  usuario devuelve.
+- No se elude DRM, geobloqueo, autenticación ni control parental; no se
+  extraen tokens ni sesiones de otras apps; no se modifica el APK original.
+- Los recursos gráficos reutilizados del APK (`webos/fidelity/assets/original`)
+  siguen siendo propiedad de sus autores y se usan aquí con fines de
+  interoperabilidad y estudio; **no** están cubiertos por la licencia del
+  código.
+- El binario FFmpeg se distribuye bajo **GPLv3**; su licencia viaja en
+  `ffmpeg-LICENSE.txt` dentro del IPK.
+- El código propio de este repositorio se publica bajo **MIT** (ver
+  [`LICENSE`](LICENSE)). Detalles de terceros en
+  [`THIRD_PARTY.md`](THIRD_PARTY.md).

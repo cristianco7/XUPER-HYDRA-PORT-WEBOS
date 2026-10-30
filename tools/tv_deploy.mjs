@@ -1,15 +1,14 @@
 // One-step deploy: upload the IPK over SFTP and install it through the TV's
 // Luna install service. This avoids ares-install's post-upload `ls`/md5
-// steps, which are unreliable on this rooted webOS 4 set.
+// steps, which are unreliable on some webOS 4 sets.
 //
-// Usage: node tools/tv_deploy.mjs dist\com.webosflux.xuptertv.fidelity_1.4.1_all.ipk
+// Usage: node tools/tv_deploy.mjs dist\com.webosflux.xuptertv.fidelity_1.5.9_all.ipk
 // Env:   TV_HOST (default 192.168.1.18), TV_PASS (default alpine)
-import { createRequire } from "node:module";
 import fs from "node:fs";
 import path from "node:path";
+import { loadSsh2 } from "./ssh2-loader.mjs";
 
-const require = createRequire(import.meta.url);
-const { Client } = require("C:/Users/crist/AppData/Roaming/npm/node_modules/@webos-tools/cli/node_modules/ssh2");
+const { Client } = loadSsh2();
 
 const local = process.argv[2];
 const host = process.env.TV_HOST || "192.168.1.18";

@@ -41,8 +41,8 @@ window.XUPERTV_API = {
   refresh: true,
 
   /* Desktop development: plain HTTP mirror of the service methods, used when
-     webOS.service is not available (analysis/tools/dev_service.mjs). Leave
-     empty on the TV. */
+     webOS.service is not available (tools/dev_service.mjs). Leave empty on the
+     TV. */
   devServiceUrl: 'http://127.0.0.1:8910',
 
   /* static / catalog modes */

@@ -1,9 +1,8 @@
 // Install an already-uploaded IPK through the TV's Luna install service.
 // Usage: node tools/tv_install.mjs /media/developer/temp/app.ipk [host] [password]
-import { createRequire } from "node:module";
+import { loadSsh2 } from "./ssh2-loader.mjs";
 
-const require = createRequire(import.meta.url);
-const { Client } = require("C:/Users/crist/AppData/Roaming/npm/node_modules/@webos-tools/cli/node_modules/ssh2");
+const { Client } = loadSsh2();
 
 const ipk = process.argv[2];
 const host = process.argv[3] || "192.168.1.18";

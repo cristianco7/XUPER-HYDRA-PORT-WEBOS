@@ -29,11 +29,11 @@ webos/fidelity/
 ├── index.html
 ├── css/style.css
 ├── js/app.js
-├── config/api.js              catálogo / backend
+├── config/api.js              modo portal / estático / backend autorizado
+├── data/portal.js             snapshot del catálogo real (pinta al instante)
 ├── data/catalog.js            muestra local de 6 películas abiertas
 ├── assets/original/           141 recursos de la APK por categoría
 ├── assets/catalog/            pósteres de la muestra
-├── shots/                     capturas 1920×1080
 └── *.md                       documentación del port
 ```
 
@@ -46,19 +46,24 @@ contiene este código. Ver `AUDITORIA_IPK.md`.
   animación de carga de 16 fotogramas.
 - **Inicio** (`activity_home.xml`): 7 pestañas con geometría XML, scrim sobre el
   pager, logo de reserva, notificaciones y mosaicos de pósters.
-- **TV en vivo** (`fragment_home_live.xml`): vídeo, lista de canales demo,
-  fila enfocada, info inferior y botones rápidos.
+- **TV en vivo** (`fragment_home_live.xml`, `frag_live_channel.xml`): vídeo,
+  lista de canales **real** del portal (`v6/getLiveData`, 1 000+ canales),
+  panel lateral con rail de categorías, selector a pantalla completa con las 38
+  columnas y filtrado real. El canal en reproducción no se corta al filtrar.
 - **Gratis** (`fragment_freefragment.xml`): cabeceras live/VOD y rejilla de 6
   columnas.
 - **Detalle VOD** (`activity_voddetails.xml`): panel izquierdo, ventana de
   vídeo, botones y relacionados.
 - **Búsqueda** (`activity_vodsearch.xml` + teclado): teclado, populares,
   resultados y estado vacío.
-- **Ajustes** (`activity_setting.xml`): 6 paneles (reproducción, contenido
-  adulto, control parental, feedback, actualización, sobre nosotros).
+- **Ajustes** (`activity_setting.xml`): 7 paneles (cuenta, mi lista, compartir,
+  bloqueo, configuración global, ayuda y sobre nosotros).
 - **Reproductor**: barra live y `<video>` real para VOD.
-- **Catálogo**: pipeline completo con muestra local y adaptador para backend
-  autorizado.
+- **Series**: navegador de episodios tipo Netflix dentro del reproductor
+  (temporadas a la izquierda, episodios a la derecha, `T10 E1 · Elegir`);
+  elegir el episodio 6 reproduce el 6 y el detalle se sincroniza al volver.
+- **Catálogo**: `data/portal.js` + refresco en vivo del servicio; búsqueda,
+  detalle y `resolve` siempre contra el portal.
 
 ## Panel del reproductor y "Ajuste de reproducir"
 
@@ -106,24 +111,31 @@ Ver `DIFERENCIAS_PENDIENTES.md`. Lo principal:
 
 - barra VOD `MFInfoBar`,
 - marquesina de botones del detalle,
-- canales reales de la pestaña TV (`v6/getLiveData`),
 - logos de marca de la franja inferior de EXPLORAR,
-- diálogo de FEEDBACK del reproductor,
+- diálogo de FEEDBACK del reproductor (el botón existe pero no abre nada),
 - paneles Account/Purchase,
 - flujo de contraseña parental,
-- `LiveFreeActivity` como pantalla propia.
+- `LiveFreeActivity` como pantalla propia,
+- reproducción directa de TS/HEVC sin relay (solo el «Modo fluido» va fluido).
 
 ## Empaquetado
 
-Build 1.4.6 (app + servicio, con FFmpeg dentro del IPK):
+Build 1.5.9 (app + servicio, con FFmpeg dentro del IPK):
 
 ```
-dist/com.webosflux.xuptertv.fidelity_1.4.6_all.ipk   22 437 328 B
-SHA-256 F4FB925770BEF311E643A335B8140EB66635200EB3320A7E2C95465128DC9084
+dist/com.webosflux.xuptertv.fidelity_1.5.9_all.ipk   22 458 886 B
+SHA-256 4C2690A2E450252DC7E4FEDF727B7CDA12B29DAA04CC6168FA4AA6BAD2A6352A
 ```
 
-1.4.6: «Modo fluido» pasa a ser una preferencia **por título**. Activarlo en
-una película no se hereda al abrir otra; una serie lo conserva entre episodios.
+Cambios recientes:
+
+- **1.5.9** — TV en vivo: el rail de categorías conserva el foco al filtrar,
+  se desplaza solo hasta la categoría activa y **Arriba** abre un selector a
+  pantalla completa con las 38 columnas del portal. Se sustituye `gap` por
+  márgenes (Chromium 53 no lo soporta). OK con el panel abierto ya no reintenta
+  el stream caído en lugar de activar la fila enfocada.
+- **1.5.8 y anteriores** — navegador de episodios tipo Netflix, audio y
+  subtítulos reales, «Modo fluido» por título, panel del reproductor.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools/build-ipk.ps1
@@ -154,16 +166,16 @@ Instalación en la TV de pruebas (`ares-install` falla en este equipo tras la
 subida; el servicio Luna sí instala):
 
 ```powershell
-node tools\tv_deploy.mjs dist\com.webosflux.xuptertv.fidelity_1.4.6_all.ipk
+node tools\tv_deploy.mjs dist\com.webosflux.xuptertv.fidelity_1.5.9_all.ipk
 ```
 
 Contiene la app completa (`config/`, `data/`, `assets/original/` y
 `assets/catalog/`) más el servicio Node. Excluye capturas, documentación y el
 IPK antiguo.
 
-No es una release final: sigue pendiente `MFInfoBar`, la marquesina, los
-episodios, la contraseña parental, los paneles Account/Purchase y la
-comparación con referencia visual. Ver `PLAN_CORRECCION.md` (fases 1–5).
+No es una release final: sigue pendiente `MFInfoBar`, la marquesina, la
+contraseña parental, los paneles Account/Purchase y la comparación con
+referencia visual. Ver `PLAN_CORRECCION.md` (fases 1–5).
 
 ## Documentos
 
