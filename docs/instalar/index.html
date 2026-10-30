@@ -419,9 +419,9 @@
           Escribe <b>B</b> y Enter: el instalador busca el televisor en tu red y te lo propone.</span></li>
         <li>Cuando pregunte el tipo de TV, escribe <b>1</b> y pulsa <b>Enter</b>
           (la opción 2 es solo para televisores modificados).</li>
-        <li>Ahora pedirá la <b>contraseña</b>. Escribe la clave de la TV.
-          <b>No se ve nada mientras escribes</b>: es normal. Pulsa <b>Enter</b>.</li>
-        <li>Te la pedirá <b>una segunda vez</b>. Es normal. Vuelve a escribirla y <b>Enter</b>.</li>
+        <li>Ahora pedirá la <b>clave de la TV</b>. Escríbela: <b>no se ve nada mientras escribes</b>.
+          Pulsa <b>Enter</b>. El instalador la comprueba con la TV antes de copiar nada; si está mal,
+          te deja escribirla otra vez (hasta 3 intentos).</li>
         <li>Espera. Verás puntos y mensajes. <b>No cierres la ventana.</b></li>
       </ol>
 
@@ -444,16 +444,18 @@
 <span class="y">   IP del televisor [192.168.1.50]:</span> 192.168.1.50
 <span class="y">   Tipo de TV:  1) Modo Desarrollador (lo normal)   2) TV con root</span>
 <span class="y">   Elige 1 o 2 [1]:</span> 1
+
+<span class="d">  [4/6] Comprobando la conexion</span>
 <span class="g">      OK   El SSH de la TV escucha en el puerto 9922</span>
 <span class="g">      OK   El televisor responde</span>
 <span class="g">      OK   TV: 192.168.1.50:9922  usuario: prisioner</span>
 
-<span class="d">  [4/6] Comprobando la conexion</span>
-<span class="g">      OK   El televisor responde</span>
-
 <span class="d">  [5/6] Copiando la aplicacion al televisor</span>
-<span class="d">           Te va a pedir la contrasena DOS veces. Es normal.</span>
-<span class="y">prisioner@192.168.1.50's password:</span> <span class="d">(no se ve al escribir)</span>
+<span class="d">           Escribe la clave que muestra la app "Developer Mode" en la TV.</span>
+<span class="d">           No se ve nada mientras escribes: es normal.</span>
+<span class="y">   Clave de la TV (no se ve al escribir):</span> <span class="d">(no se ve al escribir)</span>
+<span class="d">           Comprobando la clave con la TV...</span>
+<span class="g">      OK   La TV acepta la clave</span>
 <span class="g">      OK   Paquete copiado</span>
 
 <span class="d">  [6/6] Instalando en el televisor</span>
@@ -637,9 +639,10 @@
       </details>
 
       <details>
-        <summary>¿Por qué me pide la contraseña dos veces?</summary>
-        <p>Porque son dos conexiones distintas: una para <b>copiar</b> el archivo y otra para
-        <b>instalarlo</b>. Es normal en todos los instaladores de webOS.</p>
+        <summary>¿Por qué me pide la clave solo una vez?</summary>
+        <p>Porque el instalador la guarda en memoria y la reutiliza para las dos conexiones (copiar e
+        instalar). Antes se pedía dos veces; ahora se comprueba una sola vez, antes de subir nada, y así
+        no pierdes un minuto si la escribes mal.</p>
       </details>
 
       <details>

@@ -106,9 +106,10 @@ Pensado para quien solo tiene el archivo y no quiere tocar una terminal:
    `tools/make-kit.ps1`).
 2. Extráela y haz **doble clic en `INSTALAR-XUPERTV.bat`**.
 3. Escribe la **IP** del televisor y la **clave** que muestra la app
-   *Developer Mode* (la pide dos veces: es normal).
+   *Developer Mode* (se pide una sola vez: el instalador la comprueba con la TV
+   antes de copiar nada).
    Si no sabes la IP —o ha cambiado al reiniciar la TV— escribe **`B`** y el
-   instalador la busca solo en tu red local (puerto 22).
+   instalador la busca solo en tu red local (puerto 9922 o 22).
 4. Espera a que diga **LISTO**: la app se abre sola en la TV.
 
 No hace falta Node.js ni `ares-cli`: usa el cliente SSH que ya trae Windows

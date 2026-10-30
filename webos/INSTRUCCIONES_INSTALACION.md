@@ -20,9 +20,10 @@ en un televisor LG con webOS 4. Probado en un **LG 43LM6300PDB con webOS
 1. Consigue la carpeta `XuperTV-instalador-<versión>` (ZIP generado con
    `tools/make-kit.ps1`) y **extráela**.
 2. Doble clic en `INSTALAR-XUPERTV.bat`.
-3. Escribe la IP del televisor y la clave de *Developer Mode* (la pide dos
-   veces: una para copiar el paquete y otra para instalarlo). Si no sabes la
-   IP, escribe `B` y el instalador escanea tu red buscando el puerto 22.
+3. Escribe la IP del televisor y la clave de *Developer Mode*. La clave se pide
+   una sola vez: el instalador la verifica con la TV (`ssh ... true`) antes de
+   copiar el paquete y la reutiliza para instalar. Si no sabes la IP, escribe
+   `B` y escanea tu red buscando el puerto 9922 o el 22.
 4. Espera a `LISTO`. La app se abre sola.
 
 Qué hace por dentro: comprueba el puerto (9922 o 22), sube el IPK por SCP a
