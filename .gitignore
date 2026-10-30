@@ -32,6 +32,9 @@ webos/fidelity/data/portal.local.js
 webos/services/com.webosflux.xuptertv.fidelity.service/*.log
 webos/services/com.webosflux.xuptertv.fidelity.service/.cache/
 
+# Instalador: recuerda la ultima IP/usuario del televisor
+tools/instalar-config.json
+
 # OS / editor noise
 Thumbs.db
 desktop.ini

@@ -4,7 +4,44 @@ Guía para instalar **XuperTV para LG webOS** (`com.webosflux.xuptertv.fidelity`
 en un televisor LG con webOS 4. Probado en un **LG 43LM6300PDB con webOS
 4.10.2-29**.
 
-## Requisitos
+> **¿Solo quieres instalarlo y no te apetece leer?** Usa la guía visual
+> [`docs/instalar/index.html`](../docs/instalar/index.html) o el instalador de
+> doble clic (`INSTALAR-XUPERTV.bat`). Este documento es la versión técnica.
+
+## Dos caminos
+
+| Camino | Para quién | Qué necesita |
+|---|---|---|
+| **A. Instalador de doble clic** | cualquiera, sin terminal | Windows 10/11 (SSH ya incluido) |
+| **B. ares-cli** | desarrollo y depuración | Node.js + `@webos-tools/cli` |
+
+## A. Instalador de doble clic
+
+1. Consigue la carpeta `XuperTV-instalador-<versión>` (ZIP generado con
+   `tools/make-kit.ps1`) y **extráela**.
+2. Doble clic en `INSTALAR-XUPERTV.bat`.
+3. Escribe la IP del televisor y la clave de *Developer Mode* (la pide dos
+   veces: una para copiar el paquete y otra para instalarlo).
+4. Espera a `LISTO`. La app se abre sola.
+
+Qué hace por dentro: comprueba el puerto 22, sube el IPK por SCP a
+`/media/developer/temp`, llama a `com.webos.appInstallService/dev/install`,
+espera a que la versión instalada coincida con la del IPK, verifica que
+`ffmpeg` quedó en `0755` y lanza la app con `com.webos.applicationManager/launch`.
+
+Opciones avanzadas del instalador:
+
+```powershell
+# sin preguntas
+powershell -ExecutionPolicy Bypass -File tools\instalar-tv.ps1 -Ipk dist\app.ipk -TvHost 192.168.1.50
+
+# comprobar el paquete sin tocar la TV
+powershell -ExecutionPolicy Bypass -File tools\instalar-tv.ps1 -DryRun
+```
+
+## B. Instalación con ares-cli
+
+### Requisitos
 
 - Televisor LG con **webOS 4.0 o superior** conectado a la red.
 - PC en la misma red, con **Node.js 18+** y `@webos-tools/cli`:
@@ -17,7 +54,7 @@ en un televisor LG con webOS 4. Probado en un **LG 43LM6300PDB con webOS
   descargado de la sección *Releases*.
 - Modo desarrollador activo en el televisor.
 
-## 1. Activar el modo desarrollador
+### 1. Activar el modo desarrollador
 
 1. Instala la app **Developer Mode** desde la LG Content Store.
 2. Inicia sesión con una cuenta LG Developer y activa el modo.
@@ -26,7 +63,7 @@ en un televisor LG con webOS 4. Probado en un **LG 43LM6300PDB con webOS
 > El modo desarrollador caduca a las 50 horas. Cuando caduca, `ares-install`
 > deja de autenticar: vuelve a la app y renueva la sesión.
 
-## 2. Registrar el televisor en ares
+### 2. Registrar el televisor en ares
 
 ```bash
 ares-setup-device
@@ -46,7 +83,7 @@ ares-device-info --device tv
 ares-novacom --device tv --getkey
 ```
 
-## 3. Instalar el IPK
+### 3. Instalar el IPK
 
 ```bash
 ares-install --device tv dist/com.webosflux.xuptertv.fidelity_1.5.9_all.ipk
@@ -78,7 +115,7 @@ Sube el IPK a `/media/developer/temp/` y llama a
 `luna://com.webos.appInstallService/dev/install`. Debe terminar con
 `"state":"installed"`.
 
-## 4. Verificar la instalación
+### 4. Verificar la instalación
 
 Servicio vivo (debe responder `returnValue: true`):
 
@@ -96,7 +133,7 @@ Esperado: `-rwxr-xr-x`. Si sale `-rw-r--r--`, reinstala el IPK generado por
 `tools/build-ipk.ps1` (el script reescribe `data.tar.gz` para conservar el
 permiso) o ejecuta `chmod 755` sobre esa ruta.
 
-## 5. Actualizar
+### 5. Actualizar
 
 Instala el nuevo IPK con el mismo comando: reemplaza la versión anterior y
 conserva los datos locales (ajustes, historial, listas).
@@ -105,7 +142,7 @@ conserva los datos locales (ajustes, historial, listas).
 ares-install --device tv dist/com.webosflux.xuptertv.fidelity_<versión>_all.ipk
 ```
 
-## 6. Desinstalar
+### 6. Desinstalar
 
 ```bash
 ares-install --device tv --remove com.webosflux.xuptertv.fidelity

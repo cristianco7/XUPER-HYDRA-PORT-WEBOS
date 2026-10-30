@@ -97,6 +97,28 @@ Detalle fino de lo que falta en
 
 ## Instalación en el televisor
 
+### La forma fácil (sin comandos)
+
+Pensado para quien solo tiene el archivo y no quiere tocar una terminal:
+
+1. Consigue la carpeta `XuperTV-instalador-<versión>` (o el ZIP
+   `dist/XuperTV-instalador-<versión>.zip`, que se genera con
+   `tools/make-kit.ps1`).
+2. Extráela y haz **doble clic en `INSTALAR-XUPERTV.bat`**.
+3. Escribe la **IP** del televisor y la **clave** que muestra la app
+   *Developer Mode* (la pide dos veces: es normal).
+4. Espera a que diga **LISTO**: la app se abre sola en la TV.
+
+No hace falta Node.js ni `ares-cli`: usa el cliente SSH que ya trae Windows
+10/11. El instalador sube el IPK, lo instala con el servicio de webOS, verifica
+la versión, comprueba que `ffmpeg` quedó ejecutable y abre la app.
+
+- Guía visual paso a paso (se abre sin internet, incluye **modo presentación**
+  para grabar): [`docs/instalar/index.html`](docs/instalar/index.html)
+- Guion del vídeo tutorial: [`docs/instalar/guion-video.md`](docs/instalar/guion-video.md)
+
+### Instalación manual (ares-cli)
+
 Requisitos:
 
 - LG con **webOS 4.0 o superior** (probado en 4.10.2-29) y 1 GB de RAM.
@@ -288,6 +310,7 @@ obligatoriamente `resolveSmooth` y una URL local `127.0.0.1:8787/s/<token>.mp4`.
 
 ```
 webosflux/
+├─ INSTALAR-XUPERTV.bat              instalador de doble clic para usuarios
 ├─ webos/
 │  ├─ fidelity/                     app web final (la que se empaqueta)
 │  │  ├─ index.html, css/, js/, data/, config/, assets/, images/
@@ -295,6 +318,8 @@ webosflux/
 │  ├─ services/                     servicio Luna + FFmpeg + proxy + relay
 │  └─ …                             prototipo antiguo (histórico, no es la app)
 ├─ tools/
+│  ├─ instalar-tv.ps1               motor del instalador (SSH + Luna, sin Node)
+│  ├─ make-kit.ps1                  empaqueta el ZIP que se comparte
 │  ├─ build-ipk.ps1                 build de un paso (app + servicio + modos)
 │  ├─ setup-ffmpeg.ps1              restaura el binario desde tools/vendor
 │  ├─ fix_ipk_modes.py              fuerza 0755 en ffmpeg dentro del IPK
@@ -303,14 +328,18 @@ webosflux/
 │  ├─ tv_exec.mjs / tv_luna.mjs     utilidades SSH para depurar el televisor
 │  ├─ ssh2-loader.mjs               localiza ssh2 sin rutas absolutas
 │  └─ vendor/                       FFmpeg 7.0.2 armhf estático (tar.xz)
-├─ docs/screenshots/                capturas usadas en este README
-└─ dist/                            IPKs generados (no versionados)
+├─ docs/
+│  ├─ instalar/                     guía visual + guion del vídeo
+│  └─ screenshots/                  capturas usadas en este README
+└─ dist/                            IPKs y kits generados (no versionados)
 ```
 
 ## Documentación
 
 | Documento | Contenido |
 |---|---|
+| [`docs/instalar/index.html`](docs/instalar/index.html) | Guía visual de instalación para usuarios (sin comandos) |
+| [`docs/instalar/guion-video.md`](docs/instalar/guion-video.md) | Guion del vídeo tutorial, escena por escena |
 | [`webos/fidelity/README_FIDELITY.md`](webos/fidelity/README_FIDELITY.md) | Estado del port y estructura interna |
 | [`webos/fidelity/MAPA_PANTALLAS.md`](webos/fidelity/MAPA_PANTALLAS.md) | Pantalla → layout del APK → recursos → CSS/JS |
 | [`webos/fidelity/COMPARACION_VISUAL.md`](webos/fidelity/COMPARACION_VISUAL.md) | Medidas XML frente al render 1920×1080 |
