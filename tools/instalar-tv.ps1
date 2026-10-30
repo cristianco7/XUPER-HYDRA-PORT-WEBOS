@@ -47,6 +47,8 @@ $script:Fail = 0
 $script:KeyPath = ''
 $script:KeyDir = ''
 $script:UseKey = $false
+$script:KeyIsRsa = $false
+$script:DiagLog = ''
 
 # ---------------------------------------------------------------- apariencia
 function Line { Write-Host ('  ' + ('-' * 68)) -ForegroundColor DarkGray }
@@ -435,6 +437,7 @@ function Get-TvKey([string]$ip, [string]$passphrase) {
         }
         $pub = (& ssh-keygen -y -f $path 2>&1 | Out-String)
         if ($pub -notmatch '^ssh-(rsa|ed25519)') { return '' }
+        $script:KeyIsRsa = ($pub -match '^ssh-rsa')
         return $path
     } catch {
         return ''
@@ -449,7 +452,7 @@ function Test-KeyAuth([string]$keyPath) {
     $ErrorActionPreference = 'Continue'
     try {
         $a = @('-i', $keyPath, '-o', 'IdentitiesOnly=yes', '-o', 'BatchMode=yes',
-            '-o', 'NumberOfPasswordPrompts=0', '-p', "$Port") + $script:SshOpts + @(
+            '-o', 'NumberOfPasswordPrompts=0', '-p', "$Port") + (Get-KeyAlgOpts) + $script:SshOpts + @(
             ($TvUser + '@' + $TvHost), 'true')
         $out = & ssh @a 2>&1 | Out-String
         $script:LastAuthError = $out
@@ -462,11 +465,53 @@ function Test-KeyAuth([string]$keyPath) {
     }
 }
 
+function Get-KeyAlgOpts {
+    # OpenSSH 9.5 ofrece primero rsa-sha2-512/256; el sshd 6.1 de webOS solo
+    # conoce ssh-rsa, y con varias ofertas agota MaxAuthTries. Se fija ssh-rsa
+    # como UNICO algoritmo de firma para esta conexion.
+    if ($script:KeyIsRsa) { return @('-o', 'PubkeyAcceptedAlgorithms=ssh-rsa') }
+    return @()
+}
+
+function Get-KeyAuthDebug([string]$keyPath) {
+    # Si la llave se descifra pero la TV no la autoriza, esto dice por que.
+    # Guarda la salida completa en un archivo para poder enviarla.
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $a = @('-vvv', '-i', $keyPath, '-o', 'IdentitiesOnly=yes', '-o', 'BatchMode=yes',
+            '-o', 'NumberOfPasswordPrompts=0', '-p', "$Port") + (Get-KeyAlgOpts) + $script:SshOpts + @(
+            ($TvUser + '@' + $TvHost), 'true')
+        $out = & ssh @a 2>&1 | Out-String
+        $logPath = Join-Path $env:TEMP 'diagnostico-xupertv.txt'
+        try {
+            $sshVer = ([regex]::Match(((& ssh -V 2>&1) | Out-String), 'OpenSSH[_A-Za-z0-9.]+')).Value
+            $head = 'XuperTV - diagnostico de la llave de seguridad' + "`r`n" +
+                ('TV      : ' + $TvUser + '@' + $TvHost + ':' + $Port) + "`r`n" +
+                ('Fecha   : ' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')) + "`r`n" +
+                ('Huella  : ' + (((& ssh-keygen -lf $keyPath 2>&1) | Out-String).Trim())) + "`r`n" +
+                ('Version : ' + $sshVer) + "`r`n`r`n"
+            [System.IO.File]::WriteAllText($logPath, $head + $out, (New-Object System.Text.UTF8Encoding($false)))
+            $script:DiagLog = $logPath
+        } catch {
+            $script:DiagLog = ''
+        }
+        $lines = ($out -split "`r?`n") | Where-Object {
+            $_ -match 'Offering public key|Server accepts key|Authentications that can continue|Next authentication|sign_and_send_pubkey|send_pubkey_test|Permission denied|Too many authentication|no mutual signature|Load key|Will attempt|Connection closed|Connection reset'
+        }
+        return (($lines | ForEach-Object { '           ' + $_.Trim() }) -join "`n")
+    } catch {
+        return ''
+    } finally {
+        $ErrorActionPreference = $prev
+    }
+}
+
 function Get-AuthArgs {
     # Con clave: -i y BatchMode (asi ssh nunca se queda esperando una tecla).
     if ($script:UseKey -and $script:KeyPath) {
         return @('-i', $script:KeyPath, '-o', 'IdentitiesOnly=yes',
-            '-o', 'BatchMode=yes', '-o', 'NumberOfPasswordPrompts=0')
+            '-o', 'BatchMode=yes', '-o', 'NumberOfPasswordPrompts=0') + (Get-KeyAlgOpts)
     }
     return @()
 }
@@ -760,13 +805,36 @@ while (-not $tvPass) {
     Info 'No la acepta como contrasena. Probando la llave de seguridad...'
     $keyPath = Get-TvKey $TvHost $tvPass
     if ($keyPath) {
-        if (Test-KeyAuth $keyPath) {
+        # La TV a veces corta una conexion suelta: se reintenta antes de darla
+        # por buena o por mala.
+        $authOk = $false
+        for ($try = 1; $try -le 3; $try++) {
+            if (Test-KeyAuth $keyPath) { $authOk = $true; break }
+            if ($try -lt 3) { Start-Sleep -Seconds 1 }
+        }
+        if ($authOk) {
             $script:KeyPath = $keyPath
             $script:UseKey = $true
             Ok 'La TV acepta la llave de seguridad (KEY SERVER)'
             break
         }
-        Info 'La llave se descifro, pero la TV no la autoriza.'
+        # Si la llave se descifro, la passphrase es correcta: pedirla otra vez no
+        # arregla nada. El problema esta en la sesion de Developer Mode.
+        Fail 'La clave es correcta (ha descifrado la llave), pero la TV no la autoriza.'
+        Info 'Eso NO es un fallo de la clave: es la sesion de Developer Mode de la TV.'
+        Info 'En la TV: abre "Developer Mode", desactiva y vuelve a activar el modo,'
+        Info 'espera el reinicio y apunta la IP nueva (puede cambiar). Repite entonces.'
+        $dbg = Get-KeyAuthDebug $keyPath
+        if ($dbg) {
+            Info 'Detalle tecnico:'
+            Write-Host $dbg -ForegroundColor DarkGray
+        }
+        if ($script:DiagLog) {
+            Info ('Diagnostico guardado en: ' + $script:DiagLog)
+            Info 'Envia ese archivo si necesitas ayuda.'
+        }
+        Pause-End
+        exit 1
     }
     Fail 'La TV ha rechazado esa clave.'
     Info 'Escribela otra vez con cuidado: no se ve al escribir.'
