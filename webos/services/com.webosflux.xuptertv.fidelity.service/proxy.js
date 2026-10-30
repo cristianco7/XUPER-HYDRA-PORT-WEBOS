@@ -284,9 +284,10 @@ function forward(req, res, entry, token) {
     var contentType = 'video/mp2t';
     if (rawMime.indexOf('mp4') !== -1) {
       contentType = 'video/mp4';
-    } else if (rawMime.indexOf('mpegurl') !== -1) {
+    } else if (rawMime.indexOf('mpegurl') !== -1 || (entry.url && entry.url.indexOf('.m3u8') !== -1)) {
       contentType = 'application/vnd.apple.mpegurl';
     }
+    var isM3u8 = (contentType === 'application/vnd.apple.mpegurl');
 
     var out = {
       'Content-Type': contentType,
@@ -296,7 +297,7 @@ function forward(req, res, entry, token) {
          webOS media pipeline discard every received range, leaving it with a
          tiny buffer and visible micro-pauses.  A short private cache permits
          normal read-ahead/retry without sharing the licensed response. */
-      'Cache-Control': 'private, max-age=120',
+      'Cache-Control': isM3u8 ? 'no-cache, no-store' : 'private, max-age=120',
       'Connection': 'keep-alive'
     };
     if (up.headers['content-length']) { out['Content-Length'] = up.headers['content-length']; }
@@ -387,7 +388,7 @@ function handler(req, res) {
     res.end('expired');
     return;
   }
-  if (subpath.indexOf('.m3u8') !== -1) {
+  if (entry.url.indexOf('.m3u8') === -1 && subpath.indexOf('.m3u8') !== -1) {
     sendVirtualHls(req, res, token, entry);
     return;
   }

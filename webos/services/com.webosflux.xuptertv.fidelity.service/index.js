@@ -114,20 +114,20 @@ function attachSubtitles(payload) {
 }
 
 /* resolve({contentId, seriesContentId, playbackMode, trackIndex}) */
-service.register('resolve', function (message) {
+function resolveStream(message, forceRelay) {
   var payload = message.payload || {};
   var options = { trackIndex: payload.trackIndex };
   magis.resolve(payload.contentId, payload.seriesContentId, options, function (err, stream) {
     if (err) { return fail(message, err); }
 
-    var isHevc = (stream.codec === 'HEVC' || stream.codec === 'H265' || stream.codec === 'H.265');
+    var isHevc = /hevc|h\.?265/i.test(stream.codec || '') || /hevc|h\.?265/i.test(stream.mime || '');
     /* 1.4.2 renamed the UI modes to direct/relay; accept both spellings so an
        older app build and the current one both reach the relay. */
-    var useSmoothMode = payload.playbackMode === 'smooth' || payload.playbackMode === 'relay';
-    /* webOS 4 handles AVC/H.264 transport streams natively.  Keep those on
-       the light direct proxy so they retain native seeking; remux only the
-       HEVC streams whose native TS path visibly judders on this TV. */
-    if (relay.available() && isHevc && useSmoothMode) {
+    var useSmoothMode = forceRelay || payload.forceRelay === true || payload.forceRelay === 'true' ||
+      payload.playbackMode === 'smooth' || payload.playbackMode === 'relay';
+    /* When smooth mode (Modo Fluido) is requested by the user, always route via
+       the on-device FFmpeg relay so the native player receives clean fragmented MP4. */
+    if (relay.available() && useSmoothMode) {
       var relayUrl = relay.register(stream, { hevc: isHevc, audio: Number(payload.audioTrack) || 0 });
       console.log('[xuper-service] routing stream via ffmpeg relay: ' + relayUrl);
       stream.proxyPath = relayUrl;
@@ -154,7 +154,11 @@ service.register('resolve', function (message) {
       respond(message, null, stream);
     });
   });
-});
+}
+service.register('resolve', function (message) { resolveStream(message, false); });
+/* Separate Luna method: avoids older webOS bridges dropping custom boolean
+   fields from a resolve payload. */
+service.register('resolveSmooth', function (message) { resolveStream(message, true); });
 
 /* mediaInfo({contentId, seriesContentId}) -> { audio, subtitles, tracks }
  * Audio languages and subtitle files for the in-player dialog.  It runs
@@ -166,6 +170,48 @@ service.register('mediaInfo', function (message) {
     proxy.start(function (perr) {
       if (perr) { return fail(message, perr); }
       respond(message, null, attachSubtitles(info));
+    });
+  });
+});
+
+service.register('liveChannels', function (message) {
+  var payload = message.payload || {};
+  magis.getLiveChannels(payload.columnId, function (err, channels) {
+    if (err) { return fail(message, err); }
+    respond(message, null, { channels: channels || [] });
+  });
+});
+
+service.register('liveCategories', function (message) {
+  magis.getLiveCategories(function (err, categories) {
+    if (err) { return fail(message, err); }
+    respond(message, null, { categories: categories || [] });
+  });
+});
+
+service.register('fetchM3u', function (message) {
+  var payload = message.payload || {};
+  if (!payload.url) { return fail(message, new Error('url requerida')); }
+  magis.fetchM3u(payload.url, function (err, channels) {
+    if (err) { return fail(message, err); }
+    respond(message, null, { channels: channels || [] });
+  });
+});
+
+service.register('resolveLive', function (message) {
+  var payload = message.payload || {};
+  if (payload.streamUrl) {
+    return respond(message, null, { url: payload.streamUrl, proxyPath: payload.streamUrl, isHls: true });
+  }
+  if (!payload.channelCode) { return fail(message, new Error('channelCode requerido')); }
+  magis.resolveLive(payload.channelCode, function (err, stream) {
+    if (err) { return fail(message, err); }
+    proxy.start(function (perr) {
+      if (perr) { return fail(message, perr); }
+      var token = proxy.add(stream.url, stream.headers, 0);
+      stream.proxyPath = proxy.baseUrl() + '/media/' + token + '/stream.m3u8';
+      stream.isHls = true;
+      respond(message, null, stream);
     });
   });
 });

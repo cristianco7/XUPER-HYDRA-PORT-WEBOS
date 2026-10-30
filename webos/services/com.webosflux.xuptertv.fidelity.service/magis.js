@@ -19,6 +19,8 @@
 
 var crypto = require('crypto');
 var https = require('https');
+var http = require('http');
+var url = require('url');
 
 /* --------------------------------------------------------------- constants */
 var KEY_HEX = 'e7af1ed7de1ffddd7bd3fe37ebdffde9ef3fe1ae39edfeb8';
@@ -75,6 +77,12 @@ var FINGERPRINT_FIXED = {
 /* ------------------------------------------------------------------ crypto */
 function bufFrom(value, enc) {
   return Buffer.from ? Buffer.from(value, enc) : new Buffer(value, enc);
+}
+function bufAlloc(size) {
+  if (Buffer.alloc) { return Buffer.alloc(size); }
+  var b = new Buffer(size);
+  b.fill(0);
+  return b;
 }
 
 var EMPTY_IV = bufFrom('', 'binary');
@@ -527,7 +535,11 @@ function detail(contentId, done) {
             name: text(e.name),
             number: e.seriesNumber === undefined || e.seriesNumber === null ? i + 1 : e.seriesNumber,
             duration: text(e.duration),
-            quality: text(e.quality)
+            quality: text(e.quality),
+            /* Optional artwork/synopsis used by the episode browser when the
+               portal sends them; the list falls back to number+title. */
+            picture: text(e.picture || e.pic || e.image || e.cover || e.posterUrl || e.poster),
+            description: text(e.description || e.desc || e.synopsis || e.shortDescription || e.introduce)
           });
         }
       }
@@ -813,12 +825,344 @@ function resolve(contentId, seriesId, options, done) {
   });
 }
 
+/* ------------------------------------------------------------------- live */
+var LIVE_K = [
+  0xd76aa478, 0xe8c7b756, 0x242070db, 0xc1bdceee,
+  0xf57c0faf, 0x4787c62a, 0xa8304613, 0xfd469501,
+  0x698098d8, 0x8b44f7af, 0xffff5bb1, 0x895cd7be,
+  0x6b901122, 0xfd987193, 0xa679438e, 0x49b40821,
+  0xf61e2562, 0xc040b340, 0x265e5a51, 0xe9b6c7aa,
+  0xd62f105d, 0x02441453, 0xd8a1e681, 0xe7d3fbc8,
+  0x21e1cde6, 0xc33707d6, 0xf4d50d87, 0x455a14ed,
+  0xa9e3e905, 0xfcefa3f8, 0x676f02d9, 0x8d2a4c8a,
+  0xfffa3942, 0x8771f681, 0x6d9d6122, 0xfde5380c,
+  0xa4beea44, 0x4bdecfa9, 0xf6bb4b60, 0xbebfbc70,
+  0x289b7ec6, 0xeaa127fa, 0xd46f3085, 0x04881d05,
+  0xd9d4d039, 0xe6bd99e5, 0x1fa27cf8, 0xc4ac5665,
+  0xf4292244, 0x432aff97, 0xab9423a7, 0xfc93a039,
+  0x655b59c3, 0x8f0ccc92, 0xffecc47d, 0x85845dd1,
+  0x6fa87e4f, 0xfe2ce6e0, 0xa3014314, 0x4e0811a1,
+  0xf7537e82, 0xbd3af235, 0x2da7d2bb, 0xeb86d391
+];
+var LIVE_S = [
+  7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22,
+  5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20,
+  4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23,
+  6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21
+];
+var LIVE_ROUND1 = [10, 11, 12, 13, 14, 15, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5];
+var LIVE_G = [];
+for (var iG = 0; iG < 64; iG++) {
+  LIVE_G.push(iG < 16 ? LIVE_ROUND1[iG] : iG < 32 ? (5 * iG + 1) % 16 : iG < 48 ? (3 * iG + 5) % 16 : (7 * iG) % 16);
+}
+var LIVE_SALT = bufFrom([
+  0x73, 0x61, 0x6c, 0x74, 0x33, 0x33, 0x33, 0x33, 0x3d, 0x34,
+  0x98, 0x0d, 0x0a, 0x15, 0x32, 0xc9, 0xc3, 0x82, 0x17, 0x08, 0xc0
+]);
+
+function rotl(x, n) { return ((x << n) | (x >>> (32 - n))) >>> 0; }
+
+function liveCompress(st, block, off) {
+  var m = new Array(16);
+  for (var j = 0; j < 16; j++) {
+    var p = off + j * 4;
+    m[j] = (block[p] | (block[p + 1] << 8) | (block[p + 2] << 16) | (block[p + 3] << 24)) >>> 0;
+  }
+  var a = st[0], b = st[1], c = st[2], d = st[3];
+  for (var i = 0; i < 64; i++) {
+    var f;
+    if (i < 16) f = (b & c) | (~b & d);
+    else if (i < 32) f = (d & b) | (~d & c);
+    else if (i < 48) f = b ^ c ^ d;
+    else f = c ^ (b | ~d);
+    var sum = (f + a + LIVE_K[i] + m[LIVE_G[i]]) >>> 0;
+    a = d; d = c; c = b;
+    b = (b + rotl(sum, LIVE_S[i])) >>> 0;
+  }
+  st[0] = (st[0] + a) >>> 0;
+  st[1] = (st[1] + b) >>> 0;
+  st[2] = (st[2] + c) >>> 0;
+  st[3] = (st[3] + d) >>> 0;
+}
+
+function liveDigestHex(bytes) {
+  var st = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476];
+  var len = bytes.length;
+  var padLen = ((56 - ((len + 1) % 64)) + 64) % 64;
+  var total = bufAlloc(len + 1 + padLen + 8);
+  bytes.copy(total, 0);
+  total[len] = 0x80;
+  var low = (len % 0x20000000) * 8;
+  var high = Math.floor(len / 0x20000000);
+  for (var i = 0; i < 4; i++) {
+    total[len + 1 + padLen + i] = (low >>> (8 * i)) & 0xff;
+    total[len + 5 + padLen + i] = (high >>> (8 * i)) & 0xff;
+  }
+  for (var off = 0; off < total.length; off += 64) {
+    liveCompress(st, total, off);
+  }
+  var out = '';
+  for (var w = 0; w < 4; w++) {
+    for (var j = 0; j < 4; j++) {
+      var byteVal = (st[w] >>> (8 * j)) & 0xff;
+      var hex = byteVal.toString(16);
+      if (hex.length < 2) hex = '0' + hex;
+      out += hex;
+    }
+  }
+  return out;
+}
+
+function signO3(token, startMomentMs) {
+  var head = bufFrom('token=' + token + '&sign2_method=sign_o3&instance=0&start_moment=' + startMomentMs, 'utf8');
+  var msg = Buffer.concat([head, LIVE_SALT]);
+  return liveDigestHex(msg);
+}
+
+function bareHost(mainAddr) {
+  var s = typeof mainAddr === 'string' ? mainAddr : '';
+  if (s.indexOf('https://') === 0) s = s.slice(8);
+  if (s.indexOf('http://') === 0) s = s.slice(7);
+  var slash = s.indexOf('/');
+  return slash >= 0 ? s.slice(0, slash) : s;
+}
+
+function getLiveChannels(columnId, done) {
+  if (typeof columnId === 'function') { done = columnId; columnId = null; }
+  ensureSession(function (err) {
+    if (err) { return done(err); }
+    /* The portal can cap a large requested page silently.  Fetch fixed
+       pages until the final short (or empty) one so category views such as
+       Deportes do not stop after their first block of channels. */
+    var pageSize = 20;
+    var pageNum = 1;
+    var out = [];
+    var seen = {};
+    function fetchPage() {
+      post('v6/getLiveData', {
+        userToken: session.userToken,
+        userId: session.userId,
+        portalCode: PORTAL_CODE,
+        columnId: columnId || 76182,
+        dataVersion: '',
+        pageSize: pageSize,
+        pageNum: pageNum,
+        expireTimeStr: ''
+      }, function (err2, res) {
+        if (err2) { return done(err2); }
+        var list = (res && res.channelList) || [];
+        for (var i = 0; i < list.length; i++) {
+          var c = list[i];
+          if (!c || !c.channelCode || seen[c.channelCode]) continue;
+          seen[c.channelCode] = true;
+          var poster = text(c.posterUrl);
+          if (!poster && c.posterList && c.posterList.length) {
+            poster = text(c.posterList[0].fileUrl);
+          }
+          out.push({
+            channelCode: c.channelCode,
+            index: c.channelNumber || out.length + 1,
+            name: text(c.name || c.alias || ('Canal ' + (out.length + 1))),
+            logo: poster,
+            uhd: c.quality === '3',
+            fav: c.isFav || false,
+            now: 'En vivo',
+            next: '',
+            time: '',
+            liveAddressList: c.liveAddressList || []
+          });
+        }
+        /* A full page can have one final exact multiple; the following empty
+           request is harmless. Bound it as a defensive guard. */
+        if (list.length >= pageSize && pageNum < 100) {
+          pageNum++;
+          fetchPage();
+          return;
+        }
+        done(null, out);
+      });
+    }
+    fetchPage();
+  });
+}
+
+var liveCategoriesCache = null;
+function getLiveCategories(done) {
+  if (liveCategoriesCache && liveCategoriesCache.length) {
+    return done(null, liveCategoriesCache);
+  }
+  ensureSession(function (err) {
+    if (err) { return done(err); }
+    call('getNextColumns', { columnCode: 'masnew_live', pageNum: 1, pageSize: 50, version: '' }, function (err2, res) {
+      if (err2) { return done(err2); }
+      var list = (res && res.recommendList) || [];
+      var out = [];
+      for (var i = 0; i < list.length; i++) {
+        var c = list[i];
+        if (!c || !c.columnId) continue;
+        out.push({
+          id: c.columnId,
+          name: text(c.name || c.title || c.alias || 'Categoría ' + (i + 1)),
+          code: c.code || ''
+        });
+      }
+      liveCategoriesCache = out;
+      done(null, out);
+    });
+  });
+}
+
+function parseM3u(content) {
+  var lines = (content || '').split(/\r?\n/);
+  var channels = [];
+  var cur = null;
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (line.indexOf('#EXTINF:') === 0) {
+      var commaIdx = line.indexOf(',');
+      var meta = line.slice(8, commaIdx > 0 ? commaIdx : undefined);
+      var title = commaIdx > 0 ? line.slice(commaIdx + 1).trim() : 'Canal';
+      var logoMatch = /tvg-logo="([^"]+)"/i.exec(meta);
+      var groupMatch = /group-title="([^"]+)"/i.exec(meta);
+      cur = {
+        name: title,
+        logo: logoMatch ? logoMatch[1] : '',
+        group: groupMatch ? groupMatch[1] : 'Addon',
+        isAddon: true,
+        now: 'En vivo',
+        fav: false
+      };
+    } else if (line && line.indexOf('#') !== 0 && cur) {
+      cur.url = line;
+      cur.streamUrl = line;
+      cur.channelCode = 'm3u_' + (channels.length + 1);
+      cur.index = channels.length + 1;
+      channels.push(cur);
+      cur = null;
+    }
+  }
+  return channels;
+}
+
+function fetchM3u(urlStr, done) {
+  if (!urlStr) { return done(new Error('URL de addon requerida')); }
+  var isHttps = urlStr.indexOf('https://') === 0;
+  var mod = isHttps ? https : http;
+  var opts = url.parse(urlStr);
+  opts.rejectUnauthorized = false;
+  opts.headers = {
+    'User-Agent': 'Mozilla/5.0 (SmartHub; SMART-TV; U; Linux/SmartTV) AppleWebKit/538.1+ (KHTML, like Gecko) Safari/538.1+'
+  };
+  var req = mod.get(opts, function (res) {
+    if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+      return fetchM3u(res.headers.location, done);
+    }
+    if (res.statusCode !== 200) {
+      return done(new Error('HTTP ' + res.statusCode + ' al descargar addon'));
+    }
+    var chunks = [];
+    res.on('data', function (c) { chunks.push(c); });
+    res.on('end', function () {
+      var raw = Buffer.concat(chunks).toString('utf8');
+      var chs = parseM3u(raw);
+      done(null, chs);
+    });
+  });
+  req.on('error', function (err) { done(err); });
+  req.setTimeout(20000, function () { req.abort(); done(new Error('Tiempo de espera agotado al descargar addon')); });
+}
+
+/* Live authorizations are short-lived but valid long enough to make channel
+   surfing responsive.  Reusing one for two minutes avoids two portal round
+   trips every time the viewer returns to a channel. */
+var liveResolveCache = {};
+var LIVE_RESOLVE_CACHE_MS = 120000;
+function resolveLive(channelCode, done) {
+  var cached = liveResolveCache[channelCode];
+  if (cached && (Date.now() - cached.at) < LIVE_RESOLVE_CACHE_MS) {
+    return setTimeout(function () { done(null, cached.stream); }, 0);
+  }
+  ensureSession(function (err) {
+    if (err) { return done(err); }
+    call('v4/startPlayLive', { channelCode: channelCode, columnId: 0, type: '1' }, function (err2, play) {
+      if (err2) { return done(err2); }
+      var addrList = (play && play.liveAddressList) || [];
+      var addr = null;
+      for (var a = 0; a < addrList.length; a++) {
+        if (addrList[a] && addrList[a].playCode && addrList[a].license) {
+          addr = addrList[a];
+          break;
+        }
+      }
+      if (!addr && addrList[0]) { addr = addrList[0]; }
+      if (!addr || !addr.license) {
+        return done(new Error('el portal no devolvió licencia para el canal'));
+      }
+      var playCode = addr.playCode || channelCode;
+      var license = addr.license;
+
+      var bean = slbBean();
+      bean.liveCodeList = [channelCode];
+      call('v14/getSlbInfo', bean, function (err3, slb) {
+        if (err3) { return done(err3); }
+        var cdns = slb.cdn_list || [];
+        var liveCdns = [];
+        for (var c = 0; c < cdns.length; c++) {
+          var cdn = cdns[c];
+          if (cdn.tag !== 'live') continue;
+          var urls = cdn.url_list || [];
+          for (var u = 0; u < urls.length; u++) {
+            var entry = urls[u];
+            var urlStr = entry.url || '';
+            if (entry.sign_type === 'cfl' || urlStr.indexOf('sign_type=cfl') !== -1) {
+              var bh = bareHost(cdn.main_addr);
+              if (bh) liveCdns.push({ cflHost: bh, authBase: urlStr });
+            }
+          }
+        }
+        if (!liveCdns.length) {
+          return done(new Error('el portal no expuso CDN de vivo'));
+        }
+        var chosen = liveCdns[0];
+        var liveUrl = 'http://' + chosen.cflHost + '/live/' + playCode + '.m3u8';
+        var tokenMatch = chosen.authBase.match(/token=([0-9a-fA-F]{32})/);
+        var token = tokenMatch ? tokenMatch[1] : '';
+        var moment = Math.trunc(Date.now());
+        var sign2 = signO3(token, moment);
+        var authHeader = chosen.authBase + '&sign2_method=sign_o3&instance=0&start_moment=' + moment + '&sign2=' + sign2;
+        var stream = {
+          url: liveUrl,
+          mime: 'application/x-mpegurl',
+          headers: {
+            'Content-Auth': authHeader,
+            'Content-License': license,
+            'User-Agent': 'Ranger/4.9.4-17294ac0',
+            'App': 'com.android.msandroid',
+            'App-Version': '49902',
+            'X-Buffer': '0'
+          },
+          name: text(play.name)
+        };
+        liveResolveCache[channelCode] = { at: Date.now(), stream: stream };
+        done(null, stream);
+      });
+    });
+  });
+}
+
 module.exports = {
   home: home,
   search: search,
   detail: detail,
   mediaInfo: mediaInfo,
   resolve: resolve,
+  getLiveChannels: getLiveChannels,
+  getLiveCategories: getLiveCategories,
+  resolveLive: resolveLive,
+  fetchM3u: fetchM3u,
+  parseM3u: parseM3u,
+  call: call,
+  post: post,
   ensureSession: ensureSession,
   session: session,
   constants: {

@@ -17,6 +17,21 @@ analysis/
 # Platform binary restored by tools/setup-ffmpeg.ps1
 webos/services/com.webosflux.xuptertv.fidelity.service/ffmpeg
 
+# Private configuration, credentials and device-only diagnostics
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.etl
+webos/fidelity/config/api.local.js
+webos/fidelity/config/api.production.js
+webos/fidelity/data/portal.local.js
+webos/services/com.webosflux.xuptertv.fidelity.service/*.log
+webos/services/com.webosflux.xuptertv.fidelity.service/.cache/
+
 # OS / editor noise
 Thumbs.db
 desktop.ini
