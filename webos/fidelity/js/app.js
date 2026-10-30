@@ -883,6 +883,7 @@ function portalServiceCall(method, params, done) {
     playerEpisode: null,
     playerSeasonIndex: 0,
     episodeBrowserOpen: false,
+    categoryPickerOpen: false,
     browserSeason: 0,
     streamError: '',
     streamMode: 'normal',
@@ -973,6 +974,12 @@ function portalServiceCall(method, params, done) {
   var settingsMenu, settingsRight, settingsPanels = {}, settingsItems = [];
   var historyViewTab = 'history';
   var playerStage, playerInfo, playerChannels, playerVideo, playerFrame, playerStatus, nextEpisodeLoading, playerChannelRows = {};
+  /* Live category picker (all portal columns in one grid). */
+  var categoryPicker = null, pcatGrid = null, pcatSub = null;
+  /* Key of the category list currently painted in the rail, so switching a
+     category only updates classes instead of rebuilding (and detaching) the
+     focused pill. */
+  var renderedCategoryKey = '';
   /* Older webOS models cannot keep a full 500–1000-row channel category in
      memory.  The side panel therefore owns only this small moving window. */
   var LIVE_PANEL_WINDOW = 48;
@@ -988,6 +995,9 @@ function portalServiceCall(method, params, done) {
     if (r.width < 1 || r.height < 1) { return false; }
     if (state.episodeBrowserOpen) {
       return !!closest(node, '#player-episodes');
+    }
+    if (state.categoryPickerOpen) {
+      return !!closest(node, '#player-categories');
     }
     if (dialogPlaySettingsOpen) {
       return !!closest(node, '#dialog-playsettings');
@@ -1152,6 +1162,7 @@ function portalServiceCall(method, params, done) {
     if (target) { target.classList.add('is-active'); }
     state.screen = name;
     if (name !== 'player' && state.episodeBrowserOpen) { closeEpisodeBrowser(true); }
+    if (name !== 'player' && state.categoryPickerOpen) { closeCategoryPicker(true); }
     if (name !== 'player' && name !== 'detail') {
       if (dialogPlaySettingsOpen) { closePlaySettingsDialog(); }
       if (playSettingViewOpen) { closePlaySettingView(); }
@@ -1182,6 +1193,11 @@ function portalServiceCall(method, params, done) {
     if (state.screen === 'player') {
       if (vodScrubbing) {
         leaveVodScrub(false);
+        return;
+      }
+      if (state.categoryPickerOpen) {
+        lastBackTime = Date.now();
+        closeCategoryPicker();
         return;
       }
       if (state.episodeBrowserOpen) {
@@ -1274,6 +1290,12 @@ function portalServiceCall(method, params, done) {
     /* Back buttons */
     var isBack = (k === 461 || k === 27 || k === 8 || key === 'Back' || key === 'GoBack' || key === 'Escape');
     if (isBack) {
+      if (state.categoryPickerOpen) {
+        closeCategoryPicker();
+        if (e.preventDefault) { e.preventDefault(); }
+        if (e.stopPropagation) { e.stopPropagation(); }
+        return;
+      }
       if (state.episodeBrowserOpen) {
         closeEpisodeBrowser();
         if (e.preventDefault) { e.preventDefault(); }
@@ -1306,6 +1328,18 @@ function portalServiceCall(method, params, done) {
       back();
       if (e.preventDefault) { e.preventDefault(); }
       if (e.stopPropagation) { e.stopPropagation(); }
+      return;
+    }
+
+    /* Live category picker: a full-screen grid owns the d-pad while open. */
+    if (state.categoryPickerOpen) {
+      if (k === 37) { moveFocus('left'); }
+      else if (k === 38) { moveFocus('up'); }
+      else if (k === 39) { moveFocus('right'); }
+      else if (k === 40) { moveFocus('down'); }
+      else if (k === 13 || k === 32) { activate(); }
+      else { handled = false; }
+      if (handled && e.preventDefault) { e.preventDefault(); }
       return;
     }
 
@@ -1518,7 +1552,11 @@ function portalServiceCall(method, params, done) {
                  state.focus === vodSeekbar && vodScrubbing) {
         /* OK belongs to the focused timeline, not to Play/Pause. */
         leaveVodScrub(true);
-      } else if (state.screen === 'player' && state.streamError && playerVideo && playerVideo.src) {
+      } else if (state.screen === 'player' && state.streamError && playerVideo && playerVideo.src &&
+                 !closest(state.focus, '.player-channels')) {
+        /* OK retries the failed stream, but only from the video surface: with
+           the channel panel open it must activate the focused row/pill, or a
+           dead channel made every category unfilterable. */
         var retry = playerVideo.play();
         if (retry && retry.catch) { retry.catch(function () {}); }
         state.streamError = '';
@@ -5088,6 +5126,9 @@ function portalServiceCall(method, params, done) {
     playerInfo = $('player-infobar');
     playerVodInfo = $('player-vod-infobar');
     playerChannels = $('player-channels');
+    categoryPicker = $('player-categories');
+    pcatGrid = $('pcat-grid');
+    pcatSub = $('pcat-sub');
     playerVideo = $('player-video');
     playerStatus = $('player-status');
     nextEpisodeLoading = $('next-episode-loading');
@@ -5358,7 +5399,7 @@ function portalServiceCall(method, params, done) {
     var menu = el('div', 'pc-menu');
     menu.appendChild(el('div', 'ic'));
     menu.appendChild(el('div', 'l1', 'Presione [OK] para reproducir'));
-    menu.appendChild(el('div', 'l2', '(Arriba: Categorías • Derecha: Salir)'));
+    menu.appendChild(el('div', 'l2', '(Arriba: Categorías · OK: Filtrar)'));
     playerChannels.appendChild(menu);
   }
 
@@ -5366,7 +5407,6 @@ function portalServiceCall(method, params, done) {
     if (!playerChannels) { return; }
     var bar = playerChannels.querySelector('.pc-categories');
     if (!bar) { return; }
-    clear(bar);
     var cats = liveCategories && liveCategories.length ? liveCategories : [
       { id: 76182, name: 'Todos' },
       { id: 76206, name: 'Deportes' },
@@ -5377,50 +5417,145 @@ function portalServiceCall(method, params, done) {
       { id: 'addons', name: '➕ Addons M3U', isAddon: true }
     ];
 
-    var pills = [];
+    /* The portal returns 38 columns.  Rebuilding all 39 pills on every filter
+       detached the focused node mid-keypress, so the rail looked alive but the
+       d-pad had nowhere to go ("no puedo navegar hacia las categorías").
+       The bar is now rebuilt only when the column list itself changes;
+       selecting a category just swaps the is-selected class. */
+    var key = '';
+    for (var kk = 0; kk < cats.length; kk++) { key += cats[kk].id + '|'; }
+    var focusedCat = (state.focus && state.focus._cat) ? state.focus._cat : null;
+
+    if (key !== renderedCategoryKey) {
+      clear(bar);
+      var pills = [];
+      for (var i = 0; i < cats.length; i++) {
+        var cat = cats[i];
+        var pill = el('button', 'pc-cat-pill focusable', cat.name);
+        pill._cat = cat;
+        pill._idx = i;
+        pill._activate = (function (c) {
+          return function () { switchLiveCategory(c); };
+        })(cat);
+        pill._onMove = (function (idx) {
+          return function (dir) {
+            if (dir === 'left') {
+              if (idx > 0 && pills[idx - 1]) {
+                setFocus(pills[idx - 1]);
+                scrollPillIntoView(bar, pills[idx - 1]);
+              }
+              return true;
+            }
+            if (dir === 'right') {
+              if (idx < pills.length - 1 && pills[idx + 1]) {
+                setFocus(pills[idx + 1]);
+                scrollPillIntoView(bar, pills[idx + 1]);
+              } else {
+                setFocus(playerStage);
+              }
+              return true;
+            }
+            if (dir === 'up') {
+              /* All portal columns do not fit in the rail, so Up opens the
+                 full-screen category grid (the reference app's "all columns"). */
+              openCategoryPicker();
+              return true;
+            }
+            if (dir === 'down') {
+              var promo = playerChannels.querySelector('.pc-row-addon-promo');
+              if (promo) { setFocus(promo); return true; }
+              if (CHANNELS.length) { focusPlayerChannel(state.channel); return true; }
+            }
+            return false;
+          };
+        })(i);
+        bar.appendChild(pill);
+        pills.push(pill);
+      }
+      bar._pills = pills;
+      renderedCategoryKey = key;
+    }
+
+    var current = currentLiveCategory || cats[0];
+    var now = bar._pills || [];
+    for (var j = 0; j < now.length; j++) {
+      var p = now[j];
+      if (p._cat && current && p._cat.id === current.id) { p.classList.add('is-selected'); }
+      else { p.classList.remove('is-selected'); }
+    }
+
+    /* Filtering must leave the d-pad on the rail, on the same pill. */
+    if (focusedCat) {
+      var same = null;
+      for (var m = 0; m < now.length; m++) {
+        if (now[m]._cat && now[m]._cat.id === focusedCat.id) { same = now[m]; break; }
+      }
+      if (same) {
+        if (state.focus !== same) { setFocus(same); }
+        scrollPillIntoView(bar, same);
+      }
+    }
+  }
+
+  function scrollSelectedCategoryPill() {
+    if (!playerChannels) { return; }
+    var bar = playerChannels.querySelector('.pc-categories');
+    var pill = bar ? bar.querySelector('.pc-cat-pill.is-selected') : null;
+    if (bar && pill) { scrollPillIntoView(bar, pill); }
+  }
+
+  /* Full-screen column picker.  The reference APK opens a separate "all
+     columns" screen from the live home (mIvAllColumn); 38 portal categories
+     cannot fit in the 453dp in-player rail, so Up on the rail opens this grid. */
+  function openCategoryPicker() {
+    if (!categoryPicker) {
+      categoryPicker = $('player-categories');
+      pcatGrid = $('pcat-grid');
+      pcatSub = $('pcat-sub');
+    }
+    if (!categoryPicker || !pcatGrid) { return; }
+    state.categoryPickerOpen = true;
+    categoryPicker.classList.add('is-active');
+    hideInfobar();
+    renderCategoryPicker();
+    var cur = pcatGrid.querySelector('.pcat-tile.is-selected') || firstIn(pcatGrid);
+    if (cur) { setFocus(cur); }
+  }
+
+  function closeCategoryPicker(keepFocus) {
+    if (!categoryPicker || !state.categoryPickerOpen) { return; }
+    state.categoryPickerOpen = false;
+    categoryPicker.classList.remove('is-active');
+    if (keepFocus) { return; }
+    var pill = playerChannels ? playerChannels.querySelector('.pc-cat-pill.is-selected') : null;
+    if (pill) { setFocus(pill); scrollSelectedCategoryPill(); }
+    else if (state.screen === 'player' && playerStage) { setFocus(playerStage); }
+  }
+
+  function renderCategoryPicker() {
+    if (!pcatGrid) { return; }
+    var cats = liveCategories && liveCategories.length ? liveCategories : [];
+    clear(pcatGrid);
+    if (pcatSub) {
+      pcatSub.textContent = cats.length
+        ? (cats.length + ' categorías · elige una para filtrar los canales')
+        : 'Cargando categorías…';
+    }
     for (var i = 0; i < cats.length; i++) {
-      var cat = cats[i];
-      var pill = el('button', 'pc-cat-pill focusable', cat.name);
-      pill._cat = cat;
-      pill._idx = i;
-      var isCurrent = currentLiveCategory ? (currentLiveCategory.id === cat.id) : (i === 0);
-      if (isCurrent) { pill.classList.add('is-selected'); }
-      pill._activate = (function (c) {
-        return function () { switchLiveCategory(c); };
-      })(cat);
-      pill._onMove = (function (idx) {
-        return function (dir) {
-          if (dir === 'left') {
-            if (idx > 0 && pills[idx - 1]) {
-              setFocus(pills[idx - 1]);
-              scrollPillIntoView(bar, pills[idx - 1]);
-            }
-            return true;
-          }
-          if (dir === 'right') {
-            if (idx < pills.length - 1 && pills[idx + 1]) {
-              setFocus(pills[idx + 1]);
-              scrollPillIntoView(bar, pills[idx + 1]);
-            } else {
-              setFocus(playerStage);
-            }
-            return true;
-          }
-          if (dir === 'up') {
-            var btn = playerChannels.querySelector('#pc-btn-addons');
-            if (btn) { setFocus(btn); return true; }
-            return true;
-          }
-          if (dir === 'down') {
-            var promo = playerChannels.querySelector('.pc-row-addon-promo');
-            if (promo) { setFocus(promo); return true; }
-            if (CHANNELS.length) { focusPlayerChannel(0); return true; }
-          }
-          return false;
+      (function (cat) {
+        var tile = el('div', 'pcat-tile focusable');
+        tile.appendChild(el('div', 'pcat-name', cat.name));
+        if (currentLiveCategory && currentLiveCategory.id === cat.id) { tile.classList.add('is-selected'); }
+        tile._cat = cat;
+        tile._activate = function () {
+          switchLiveCategory(cat);
+          closeCategoryPicker(true);
+          var pill = playerChannels ? playerChannels.querySelector('.pc-cat-pill.is-selected') : null;
+          if (pill) { setFocus(pill); scrollSelectedCategoryPill(); }
+          else { closeChannelPanel(); }
         };
-      })(i);
-      bar.appendChild(pill);
-      pills.push(pill);
+        pcatGrid.appendChild(tile);
+      })(cats[i]);
     }
   }
 
@@ -6194,7 +6329,11 @@ function portalServiceCall(method, params, done) {
     if (state.playerMode !== 'live') { return; }
     state.channelsOpen = true;
     playerChannels.classList.add('is-active');
+    renderPlayerCategories();
     renderPlayerChannels(state.channel);
+    /* Bring the active column into view: with 38 portal categories the rail
+       is 5000px wide and the selected pill is usually off-screen. */
+    scrollSelectedCategoryPill();
     var row = playerChannelRows[state.channel];
     if (row) {
       setFocus(row);
