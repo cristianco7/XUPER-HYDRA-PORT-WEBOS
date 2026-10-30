@@ -414,7 +414,9 @@
       <ol class="big">
         <li>Haz <b>doble clic</b> en <code>INSTALAR-XUPERTV.bat</code>.
           Se abre una ventana azul.</li>
-        <li>Escribe la <b>IP</b> que apuntaste en el paso 1 y pulsa <b>Enter</b>.</li>
+        <li>Escribe la <b>IP</b> que apuntaste en el paso 1 y pulsa <b>Enter</b>.
+          <br><span style="color:var(--ink-soft);font-size:16px">¿No la sabes, o te dice que la TV no responde?
+          Escribe <b>B</b> y Enter: el instalador busca el televisor en tu red y te lo propone.</span></li>
         <li>Cuando pregunte el tipo de TV, escribe <b>1</b> y pulsa <b>Enter</b>
           (la opción 2 es solo para televisores modificados).</li>
         <li>Ahora pedirá la <b>contraseña</b>. Escribe la clave de la TV.
@@ -470,6 +472,12 @@
         <b>Si Windows muestra un aviso azul</b> (“Windows protegió tu PC”) porque el archivo vino de
         internet: pulsa <b>Más información</b> → <b>Ejecutar de todas formas</b>. Es un archivo de texto
         que solo copia la app a tu televisor.
+      </div>
+
+      <div class="tip">
+        <b>¿Dice “el televisor no responde”?</b> Lo más normal es que la IP haya cambiado al reiniciar
+        la TV. Escribe <b>B</b> (o pulsa <b>2</b> en el menú que aparece) y el instalador busca el
+        televisor en tu red. También puedes volver a mirar la IP en la app <b>Developer Mode</b>.
       </div>
 
       <div class="alert">
@@ -530,9 +538,10 @@
         <tr><th>Mensaje</th><th>Qué significa y qué hacer</th></tr>
         <tr>
           <td>No consigo hablar con el televisor</td>
-          <td>La TV está apagada, en otra red, o la IP no es esa.
-            Comprueba que el PC y la TV están en la <b>misma WiFi</b>, y copia la IP otra vez desde la app
-            Developer Mode. Ojo con las redes de invitados y con el “aislamiento de clientes” del router.</td>
+          <td>La TV está apagada, en otra red, o la IP no es esa (suele cambiar al reiniciar).
+            <b>Lo más rápido: escribe <code>B</code></b> en el instalador y lo busca solo en tu red.
+            Si no aparece, comprueba que el PC y la TV están en la <b>misma WiFi</b>, y copia la IP otra vez
+            desde la app Developer Mode. Ojo con las redes de invitados y con el “aislamiento de clientes” del router.</td>
         </tr>
         <tr>
           <td>La contraseña no es correcta…</td>

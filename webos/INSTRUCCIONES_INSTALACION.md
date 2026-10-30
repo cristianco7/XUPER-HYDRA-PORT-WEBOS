@@ -21,13 +21,16 @@ en un televisor LG con webOS 4. Probado en un **LG 43LM6300PDB con webOS
    `tools/make-kit.ps1`) y **extráela**.
 2. Doble clic en `INSTALAR-XUPERTV.bat`.
 3. Escribe la IP del televisor y la clave de *Developer Mode* (la pide dos
-   veces: una para copiar el paquete y otra para instalarlo).
+   veces: una para copiar el paquete y otra para instalarlo). Si no sabes la
+   IP, escribe `B` y el instalador escanea tu red buscando el puerto 22.
 4. Espera a `LISTO`. La app se abre sola.
 
 Qué hace por dentro: comprueba el puerto 22, sube el IPK por SCP a
 `/media/developer/temp`, llama a `com.webos.appInstallService/dev/install`,
 espera a que la versión instalada coincida con la del IPK, verifica que
 `ffmpeg` quedó en `0755` y lanza la app con `com.webos.applicationManager/launch`.
+Antes de conectar compara la IP de la TV con las del PC y avisa si están en
+redes distintas.
 
 Opciones avanzadas del instalador:
 

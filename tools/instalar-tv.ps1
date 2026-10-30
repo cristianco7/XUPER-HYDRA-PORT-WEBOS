@@ -100,6 +100,131 @@ function Test-Port($computer, $tcpPort, $timeoutMs = 3000) {
     }
 }
 
+function Test-Host($text) {
+    # Vale una IP o un nombre de equipo (lg-tv.local).
+    if (Test-IPv4 $text) { return $true }
+    return ($text -match '^[A-Za-z0-9][A-Za-z0-9.-]{0,62}$')
+}
+
+function Get-LocalIPv4 {
+    # IPs de este PC: sirven para comparar con la de la TV y para escanear.
+    $out = @()
+    try {
+        $addrs = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop |
+            Where-Object { $_.IPAddress -ne '127.0.0.1' -and $_.IPAddress -notlike '169.254.*' }
+        foreach ($a in $addrs) {
+            $out += [pscustomobject]@{ IP = [string]$a.IPAddress; Prefix = [int]$a.PrefixLength }
+        }
+    } catch {
+        try {
+            $nics = [System.Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces() |
+                Where-Object { $_.OperationalStatus -eq 'Up' -and $_.NetworkInterfaceType -ne 'Loopback' }
+            foreach ($n in $nics) {
+                foreach ($u in $n.GetIPProperties().UnicastAddresses) {
+                    if ($u.Address.AddressFamily -eq 'InterNetwork') {
+                        $out += [pscustomobject]@{ IP = $u.Address.ToString(); Prefix = 24 }
+                    }
+                }
+            }
+        } catch { }
+    }
+    $seen = @{}
+    $list = @()
+    foreach ($o in $out) {
+        if ($o.IP -and -not $seen.ContainsKey($o.IP)) { $seen[$o.IP] = $true; $list += $o }
+    }
+    return $list
+}
+
+function Get-NetworkNumber([string]$ip, [int]$prefix) {
+    if ($prefix -lt 1 -or $prefix -gt 32) { $prefix = 24 }
+    $b = [System.Net.IPAddress]::Parse($ip).GetAddressBytes()
+    [uint64]$v = ([uint64]$b[0] * 16777216) + ([uint64]$b[1] * 65536) + ([uint64]$b[2] * 256) + [uint64]$b[3]
+    [uint64]$mask = [uint64]([math]::Pow(2, 32) - [math]::Pow(2, 32 - $prefix))
+    return ($v -band $mask)
+}
+
+function Test-SameLan([string]$ip, $locals) {
+    # Devuelve la IP local que comparte red con $ip, o $null.
+    if (-not (Test-IPv4 $ip)) { return $null }
+    foreach ($l in $locals) {
+        if ((Get-NetworkNumber $ip $l.Prefix) -eq (Get-NetworkNumber $l.IP $l.Prefix)) { return $l.IP }
+    }
+    return $null
+}
+
+function Find-SshHosts($locals, [int]$tcpPort = 22) {
+    # Busca en la red local aparatos con el puerto 22 abierto (el modo
+    # desarrollador de LG lo abre). Va por tandas para tardar pocos segundos.
+    $found = @()
+    foreach ($l in $locals) {
+        $p = $l.IP.Split('.')
+        $base = $p[0] + '.' + $p[1] + '.' + $p[2]
+        $batch = 64
+        for ($start = 1; $start -le 254; $start += $batch) {
+            $tasks = @()
+            $end = [Math]::Min($start + $batch - 1, 254)
+            for ($h = $start; $h -le $end; $h++) {
+                $ip = "$base.$h"
+                if ($ip -eq $l.IP) { continue }
+                $c = New-Object System.Net.Sockets.TcpClient
+                try {
+                    $tasks += [pscustomobject]@{
+                        IP = $ip
+                        Client = $c
+                        Async = $c.BeginConnect($ip, $tcpPort, $null, $null)
+                    }
+                } catch {
+                    try { $c.Close() } catch { }
+                }
+            }
+            Start-Sleep -Milliseconds 400
+            foreach ($t in $tasks) {
+                try {
+                    if ($t.Async.AsyncWaitHandle.WaitOne(0)) {
+                        $t.Client.EndConnect($t.Async)
+                        if ($t.Client.Connected) { $found += $t.IP }
+                    }
+                } catch { }
+                try { $t.Client.Close() } catch { }
+            }
+        }
+    }
+    return @($found | Sort-Object -Unique)
+}
+
+function Select-TvFromScan($locals) {
+    if (-not $locals -or $locals.Count -eq 0) {
+        Fail 'No encuentro la red de este ordenador.'
+        Info 'Comprueba que el PC tiene WiFi o cable conectado.'
+        return ''
+    }
+    Title 'Buscando la TV en tu red (unos segundos)...'
+    Info 'Solo funciona si el Modo Desarrollador esta activo en la TV.'
+    $ips = Find-SshHosts $locals 22
+    if ($ips.Count -eq 0) {
+        Warn 'No he encontrado ningun aparato con el modo desarrollador abierto.'
+        Info 'Abre la app "Developer Mode" en la TV y comprueba que esta activada.'
+        Info 'Despues escribe B otra vez, o copia la IP a mano.'
+        return ''
+    }
+    if ($ips.Count -eq 1) {
+        Ok ('Encontrado: ' + $ips[0])
+        $confirm = Read-WithDefault 'Es tu televisor? (s/n)' 's'
+        if ($confirm -match '^[nN]') { return '' }
+        return $ips[0]
+    }
+    Title 'He encontrado varios aparatos. Cual es tu televisor?'
+    for ($i = 0; $i -lt $ips.Count; $i++) {
+        Info (('{0}) {1}') -f ($i + 1), $ips[$i])
+    }
+    $pick = Read-WithDefault 'Numero' '1'
+    $idx = 1
+    [void][int]::TryParse($pick, [ref]$idx)
+    $idx = [Math]::Max(1, [Math]::Min($ips.Count, $idx))
+    return $ips[$idx - 1]
+}
+
 function Get-IpkCandidate {
     param([string]$explicit)
 
@@ -254,13 +379,36 @@ if (Test-Path -LiteralPath $ConfigFile) {
 
 Step '3/6' 'Datos del televisor'
 Info 'La IP y la clave las muestra la app "Developer Mode" en la pantalla de la TV.'
+Info 'Al activar el modo la TV se reinicia, y entonces la IP PUEDE CAMBIAR.'
+$locals = @(Get-LocalIPv4)
+if ($locals.Count -gt 0) {
+    Info ('Este ordenador esta en: ' + (($locals | ForEach-Object { $_.IP }) -join ', '))
+}
 if (-not $TvHost) {
     $def = ''
     if ($cfg -and $cfg.host) { $def = [string]$cfg.host }
-    do {
-        $TvHost = Read-WithDefault 'IP del televisor' $def
-        if (-not (Test-IPv4 $TvHost)) { Fail 'Eso no parece una IP. Ejemplo: 192.168.1.50' }
-    } while (-not (Test-IPv4 $TvHost))
+    if ($def) { Info ('La ultima vez funciono con ' + $def + '. Pulsa Enter para repetirla.') }
+    while (-not $TvHost) {
+        $v = Read-WithDefault 'IP del televisor (o B para buscarla)' $def
+        if ([string]::IsNullOrWhiteSpace($v) -or $v -match '^(?i)(b|buscar|busca)$') {
+            # Enter en blanco = "no se cual es": la busco yo.
+            $intentos = $intentos + 1
+            if ($intentos -gt 2) {
+                Fail 'No consigo dar con la IP del televisor.'
+                Info 'Mira la app "Developer Mode" en la TV y escribe la IP a mano.'
+                Pause-End
+                exit 1
+            }
+            $TvHost = Select-TvFromScan $locals
+            continue
+        }
+        if (-not (Test-Host $v)) {
+            Fail 'Eso no parece una IP. Ejemplo: 192.168.1.50'
+            Info 'Si no sabes cual es, escribe B y la busco yo en tu red.'
+            continue
+        }
+        $TvHost = $v
+    }
 }
 
 if (-not $TvUser) {
@@ -269,20 +417,47 @@ if (-not $TvUser) {
     if ($choice -eq '2') { $TvUser = 'root' } else { $TvUser = 'prisioner' }
 }
 
-Ok ('TV: ' + $TvHost + ':' + $Port + '  usuario: ' + $TvUser)
+# Si la TV esta en otra red que el PC, no se van a ver nunca: avisar claro.
+if ((Test-IPv4 $TvHost) -and $locals.Count -gt 0) {
+    if (-not (Test-SameLan $TvHost $locals)) {
+        Warn ('La TV (' + $TvHost + ') no esta en la misma red que este PC (' + (($locals | ForEach-Object { $_.IP }) -join ', ') + ').')
+        Info 'Con la TV y el PC en redes distintas no hay forma de conectarlos.'
+        Info 'Conecta los dos al mismo router/WiFi y repite (ojo con el WiFi de invitados).'
+        $go = Read-WithDefault 'Continuar de todas formas? (s/n)' 'n'
+        if ($go -notmatch '^[sS]') { Pause-End; exit 1 }
+    }
+}
 
 # ---------------------------------------------------------- 4. conexion
 Step '4/6' 'Comprobando la conexion'
 if ($DryRun) {
     Info 'Modo de prueba: no se comprueba la red.'
-} elseif (-not (Test-Port $TvHost $Port 3000)) {
-    Warn ('El televisor no responde en ' + $TvHost + ':' + $Port + '.')
-    Info 'Si la TV esta apagada o en otra red, esto no va a funcionar.'
-    $go = Read-WithDefault 'Intentar de todas formas? (s/n)' 's'
-    if ($go -match '^[nN]') { Pause-End; exit 1 }
 } else {
+    while (-not (Test-Port $TvHost $Port 3000)) {
+        Warn ('El televisor no responde en ' + $TvHost + ':' + $Port + '.')
+        Info 'Suele ser una de tres cosas: la TV esta apagada, la IP ha cambiado,'
+        Info 'o la TV y el PC estan en redes distintas.'
+        if ($locals.Count -gt 0) {
+            Info ('Este PC esta en: ' + (($locals | ForEach-Object { $_.IP }) -join ', '))
+        }
+        Title 'Que quieres hacer?'
+        Info '1) Escribir otra IP'
+        Info '2) Buscar la TV en la red (recomendado)'
+        Info '3) Salir'
+        $pick = Read-WithDefault 'Elige 1, 2 o 3' '2'
+        if ($pick -eq '3') { Pause-End; exit 1 }
+        if ($pick -eq '1') {
+            $nueva = Read-WithDefault 'IP del televisor' ''
+            if (Test-Host $nueva) { $TvHost = $nueva } else { Fail 'Eso no parece una IP.' }
+            continue
+        }
+        $encontrada = Select-TvFromScan $locals
+        if ($encontrada) { $TvHost = $encontrada }
+    }
     Ok 'El televisor responde'
 }
+
+Ok ('TV: ' + $TvHost + ':' + $Port + '  usuario: ' + $TvUser)
 
 $script:SshOpts = @(
     '-o', 'StrictHostKeyChecking=accept-new',
