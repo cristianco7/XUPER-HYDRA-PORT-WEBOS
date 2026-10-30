@@ -333,9 +333,60 @@ function Get-IpkCandidate {
     return $list[$idx - 1].FullName
 }
 
-function Invoke-Native($exe, [string[]]$arguments) {
-    & $exe @arguments
+function Invoke-Native($exe, [string[]]$arguments, $stdinText) {
+    # Si se pasa $stdinText, se envia por la entrada estandar. El ssh de Windows
+    # no usa SSH_ASKPASS, pero si lee la clave de stdin cuando no es consola.
+    if ($null -ne $stdinText) {
+        $stdinText | & $exe @arguments
+    } else {
+        & $exe @arguments
+    }
     $script:LastExit = $LASTEXITCODE
+}
+
+function Read-TvPassword {
+    # Se lee tecla a tecla para no mostrar la clave. Si la entrada esta
+    # redirigida (por ejemplo al probar el instalador desde un script), se
+    # usa Read-Host, que en ese caso si funciona.
+    if (-not [Console]::IsInputRedirected) {
+        Write-Host '   Clave de la TV (no se ve al escribir): ' -NoNewline
+        $sb = New-Object System.Text.StringBuilder
+        while ($true) {
+            $k = [Console]::ReadKey($true)
+            if ($k.Key -eq [ConsoleKey]::Enter) { break }
+            if ($k.Key -eq [ConsoleKey]::Backspace) {
+                if ($sb.Length -gt 0) { [void]$sb.Remove($sb.Length - 1, 1) }
+                continue
+            }
+            if ($k.Key -eq [ConsoleKey]::Escape) { [void]$sb.Clear(); continue }
+            if ([char]::IsControl($k.KeyChar)) { continue }
+            [void]$sb.Append($k.KeyChar)
+        }
+        Write-Host ''
+        return $sb.ToString()
+    }
+    return (Read-Host '   Clave de la TV')
+}
+
+function Test-TvPassword([string]$pass) {
+    # Prueba la clave con un comando inofensivo antes de subir 21 MB.
+    # La salida se captura para no ensuciar la pantalla con errores de ssh.
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $a = @('-p', "$Port") + $script:SshOpts + @(
+            '-o', 'NumberOfPasswordPrompts=1',
+            ($TvUser + '@' + $TvHost), 'true'
+        )
+        $out = $pass | & ssh @a 2>&1 | Out-String
+        $script:LastAuthError = $out
+        return ($LASTEXITCODE -eq 0)
+    } catch {
+        $script:LastAuthError = '' + $_.Exception.Message
+        return $false
+    } finally {
+        $ErrorActionPreference = $prev
+    }
 }
 
 function Get-SshDiagnosis {
@@ -594,14 +645,45 @@ if ($DryRun) {
 
 # ---------------------------------------------------------- 5. copiar
 Step '5/6' 'Copiando la aplicacion al televisor'
-Info 'Te va a pedir la contrasena DOS veces. Es normal.'
-Info 'Escribe la clave que muestra la app Developer Mode (no se ve al escribir).'
+Info 'Escribe la clave que muestra la app "Developer Mode" en la TV.'
+Info 'No se ve nada mientras escribes: es normal.'
+Write-Host ''
+
+$tvPass = ''
+$intentosPass = 0
+while (-not $tvPass) {
+    $intentosPass = $intentosPass + 1
+    if ($intentosPass -gt 3) {
+        Fail 'La TV no acepta ninguna de las claves escritas.'
+        Info 'Abre la app "Developer Mode" en la TV y mira la clave de ahora.'
+        Info 'Si la sesion esta caducada, renovadla (dura 50 horas) y repite.'
+        Pause-End
+        exit 1
+    }
+    $tvPass = Read-TvPassword
+    if ([string]::IsNullOrEmpty($tvPass)) {
+        Fail 'La clave no puede estar vacia.'
+        $tvPass = ''
+        continue
+    }
+    Info 'Comprobando la clave con la TV...'
+    if (Test-TvPassword $tvPass) {
+        Ok 'La TV acepta la clave'
+    } else {
+        Fail 'La TV ha rechazado esa clave.'
+        Info 'Escribela otra vez con cuidado: no se ve al escribir.'
+        if ($intentosPass -ge 2) {
+            Info 'Tiene que ser la que muestra la app Developer Mode, tal cual.'
+        }
+        $tvPass = ''
+    }
+}
 Write-Host ''
 
 $scpArgs = @('-P', "$Port")
 if ($script:ScpLegacy) { $scpArgs = @('-O') + $scpArgs }
 $scpArgs = $scpArgs + $script:SshOpts + @($ipkPath, ($TvUser + '@' + $TvHost + ':' + $remoteIpk))
-Invoke-Native 'scp' $scpArgs
+Invoke-Native 'scp' $scpArgs $tvPass
 if ($script:LastExit -ne 0) {
     $diag = Get-SshDiagnosis
     if ($diag -match 'timed out|No route to host|Connection refused|Network is unreachable|Could not resolve') {
@@ -615,7 +697,7 @@ if ($script:LastExit -ne 0) {
     $scpArgs = @('-P', "$Port")
     if ($script:ScpLegacy) { $scpArgs = @('-O') + $scpArgs }
     $scpArgs = $scpArgs + $script:SshOpts + @($ipkPath, ($TvUser + '@' + $TvHost + ':' + $remoteIpk))
-    Invoke-Native 'scp' $scpArgs
+    Invoke-Native 'scp' $scpArgs $tvPass
     if ($script:LastExit -ne 0) {
         Explain-SshError (Get-SshDiagnosis)
         Pause-End
@@ -701,11 +783,13 @@ $utf8 = New-Object System.Text.UTF8Encoding($false)
 [System.IO.File]::WriteAllText($localJson, $installJson, $utf8)
 [System.IO.File]::WriteAllText($localLaunch, $launchJson, $utf8)
 
-$scpArgs = @('-P', "$Port") + $script:SshOpts + @(
+$scpArgs = @('-P', "$Port")
+if ($script:ScpLegacy) { $scpArgs = @('-O') + $scpArgs }
+$scpArgs = $scpArgs + $script:SshOpts + @(
     $localSh, $localJson, $localLaunch,
     ($TvUser + '@' + $TvHost + ':' + $remoteDir + '/')
 )
-Invoke-Native 'scp' $scpArgs
+Invoke-Native 'scp' $scpArgs $tvPass
 if ($script:LastExit -ne 0) {
     Explain-SshError (Get-SshDiagnosis)
     Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
@@ -714,7 +798,7 @@ if ($script:LastExit -ne 0) {
 }
 
 $sshArgs = @('-p', "$Port") + $script:SshOpts + @(($TvUser + '@' + $TvHost), ('sh ' + $remoteShPath))
-Invoke-Native 'ssh' $sshArgs
+Invoke-Native 'ssh' $sshArgs $tvPass
 $installExit = $script:LastExit
 
 Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue

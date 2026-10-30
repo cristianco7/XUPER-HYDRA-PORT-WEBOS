@@ -87,7 +87,7 @@ QUE HACER
      reinicio y apunta la IP y la clave que muestra.
   3. Doble clic en INSTALAR-XUPERTV.bat
   4. Escribe la IP cuando te la pida.
-  5. Escribe la clave de la TV DOS veces (no se ve al escribir).
+  5. Escribe la clave de la TV UNA vez (no se ve al escribir).
   6. Espera a que diga "LISTO". La app se abre sola en la TV.
 
 GUIA CON DIBUJOS
