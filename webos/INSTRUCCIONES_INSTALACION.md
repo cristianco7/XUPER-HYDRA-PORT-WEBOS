@@ -25,12 +25,19 @@ en un televisor LG con webOS 4. Probado en un **LG 43LM6300PDB con webOS
    IP, escribe `B` y el instalador escanea tu red buscando el puerto 22.
 4. Espera a `LISTO`. La app se abre sola.
 
-Qué hace por dentro: comprueba el puerto 22, sube el IPK por SCP a
+Qué hace por dentro: comprueba el puerto (9922 o 22), sube el IPK por SCP a
 `/media/developer/temp`, llama a `com.webos.appInstallService/dev/install`,
 espera a que la versión instalada coincida con la del IPK, verifica que
 `ffmpeg` quedó en `0755` y lanza la app con `com.webos.applicationManager/launch`.
 Antes de conectar compara la IP de la TV con las del PC y avisa si están en
 redes distintas.
+
+> **Nota sobre el puerto y el cifrado.** Las TV LG escuchan el SSH del modo
+> desarrollador en el **9922** (algunas también en el 22) y su OpenSSH 6.1 solo
+> ofrece `ssh-rsa`/SHA-1. El instalador detecta el puerto y reactiva esos
+> algoritmos únicamente para esa conexión (`HostKeyAlgorithms=+ssh-rsa`,
+> `KexAlgorithms=+diffie-hellman-group14-sha1`, …), además de forzar `scp -O`
+> porque la TV no tiene SFTP.
 
 Opciones avanzadas del instalador:
 
@@ -74,7 +81,7 @@ ares-setup-device
 
 - `Device name`: por ejemplo `tv`
 - `host`: la IP que muestra la app Developer Mode
-- `port`: `22`
+- `port`: `9922` (es el SSH de las TV LG; en algunos modelos también abre el `22`)
 - `username`: `prisioner` (así, sin la «o»)
 - `password`: la clave que muestra la app
 

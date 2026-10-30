@@ -444,7 +444,9 @@
 <span class="y">   IP del televisor [192.168.1.50]:</span> 192.168.1.50
 <span class="y">   Tipo de TV:  1) Modo Desarrollador (lo normal)   2) TV con root</span>
 <span class="y">   Elige 1 o 2 [1]:</span> 1
-<span class="g">      OK   TV: 192.168.1.50:22  usuario: prisioner</span>
+<span class="g">      OK   El SSH de la TV escucha en el puerto 9922</span>
+<span class="g">      OK   El televisor responde</span>
+<span class="g">      OK   TV: 192.168.1.50:9922  usuario: prisioner</span>
 
 <span class="d">  [4/6] Comprobando la conexion</span>
 <span class="g">      OK   El televisor responde</span>
@@ -650,6 +652,20 @@
         <summary>Me sale “acceso denegado” al escribir la clave</summary>
         <p>Suele ser la clave equivocada o una sesión caducada. Vuelve a la app Developer Mode:
         si pone un tiempo restante bajo o “expirado”, renuévala.</p>
+      </details>
+
+      <details>
+        <summary>¿Qué es eso del “puerto 9922”?</summary>
+        <p>Las televisiones LG tienen el acceso del modo desarrollador en el puerto <b>9922</b>, no en el
+        22 como un ordenador normal. El instalador prueba los dos y se queda con el que conteste, así que
+        no hay que hacer nada: solo verás un mensaje diciendo en cuál está.</p>
+      </details>
+
+      <details>
+        <summary>¿Por qué no me deja conectar aunque la TV tenga el modo activo?</summary>
+        <p>Comprueba que la TV y el PC están en la <b>misma red</b> y que en la app Developer Mode el
+        interruptor está en <b>ON</b> con tiempo restante. Si el instalador dice que el SSH no responde en
+        ningún puerto, reinicia la TV (apagándola del todo, no solo en espera) y vuelve a probar.</p>
       </details>
 
       <details>
