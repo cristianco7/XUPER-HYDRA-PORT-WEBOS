@@ -1,9 +1,8 @@
 // Run a shell command on the TV over SSH (root profile used by ares-setup-device).
 // Usage: node tools/tv_exec.mjs "command" [host] [password]
-import { createRequire } from "node:module";
+import { loadSsh2 } from "./ssh2-loader.mjs";
 
-const require = createRequire(import.meta.url);
-const { Client } = require("C:/Users/crist/AppData/Roaming/npm/node_modules/@webos-tools/cli/node_modules/ssh2");
+const { Client } = loadSsh2();
 
 const cmd = process.argv[2];
 const host = process.argv[3] || "192.168.1.18";

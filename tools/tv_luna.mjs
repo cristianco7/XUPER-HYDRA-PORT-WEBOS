@@ -3,10 +3,9 @@
 // Values that look like JSON scalars (true/false/null/number) are converted.
 // Example: node tools/tv_luna.mjs luna://.../search value=spiderman
 //          node tools/tv_luna.mjs luna://.../resolve contentId=ABC playbackMode=smooth
-import { createRequire } from "node:module";
+import { loadSsh2 } from "./ssh2-loader.mjs";
 
-const require = createRequire(import.meta.url);
-const { Client } = require("C:/Users/crist/AppData/Roaming/npm/node_modules/@webos-tools/cli/node_modules/ssh2");
+const { Client } = loadSsh2();
 
 const uri = process.argv[2];
 const host = process.env.TV_HOST || "192.168.1.18";

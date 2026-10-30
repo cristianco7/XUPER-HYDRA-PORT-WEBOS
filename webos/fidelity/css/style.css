@@ -3451,8 +3451,10 @@ div, section, span { outline: none; }
   display: flex;
   align-items: center;
   overflow-x: auto;
+  overflow-y: hidden;
   padding: 0 20px;
-  gap: 10px;
+  /* Chromium 53 (webOS 4) ignores flexbox `gap`; margins keep the pills
+     spaced and the scrollWidth calculation correct. */
 }
 .pc-categories::-webkit-scrollbar { display: none; }
 
@@ -3460,6 +3462,7 @@ div, section, span { outline: none; }
   height: 38px;
   line-height: 38px;
   padding: 0 16px;
+  margin-right: 10px;
   border-radius: 19px;
   background: rgba(255, 255, 255, 0.1);
   color: #d0d0d0;
@@ -3470,6 +3473,7 @@ div, section, span { outline: none; }
   border: 1px solid transparent;
   outline: none;
 }
+.pc-cat-pill:last-child { margin-right: 0; }
 .pc-cat-pill.is-selected {
   background: #c91923;
   color: #ffffff;
@@ -3478,6 +3482,72 @@ div, section, span { outline: none; }
 .pc-cat-pill.is-focused {
   outline: 2px solid #ffffff;
   box-shadow: 0 0 10px rgba(201, 25, 35, 0.8);
+}
+
+/* =============================================================================
+   LIVE COLUMN PICKER (all portal categories)
+   ============================================================================= */
+.player-categories {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1920px;
+  height: 1080px;
+  display: none;
+  z-index: 45;
+  box-sizing: border-box;
+  padding: 90px 120px 60px;
+  background: #0a0c16;
+  background: -webkit-linear-gradient(top, #0d1020 0%, #05060c 100%);
+  background: linear-gradient(180deg, #0d1020 0%, #05060c 100%);
+}
+.player-categories.is-active { display: block; }
+.pcat-head { margin-bottom: 30px; }
+.pcat-title {
+  font-size: 46px;
+  line-height: 56px;
+  color: #ffffff;
+  font-weight: 700;
+}
+.pcat-sub { margin-top: 4px; font-size: 23px; line-height: 30px; color: #a3a6aa; }
+.pcat-grid {
+  position: absolute;
+  left: 120px;
+  right: 120px;
+  top: 200px;
+  bottom: 50px;
+  overflow: hidden;
+}
+.pcat-tile {
+  display: block;
+  float: left;
+  width: 300px;
+  height: 104px;
+  margin: 0 20px 20px 0;
+  padding: 0 24px;
+  box-sizing: border-box;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.08);
+  border: 2px solid transparent;
+  color: #e6e6e6;
+  font-size: 28px;
+  line-height: 100px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pcat-grid:after { content: ''; display: block; clear: both; }
+.pcat-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.pcat-tile.is-selected { background: #c91923; color: #ffffff; font-weight: bold; }
+.pcat-tile.is-focused {
+  border-color: #ffffff;
+  background: #ff2a38;
+  color: #ffffff;
+  transform: scale(1.04);
 }
 
 /* Adjust .pc-div and .pc-list for the category bar */

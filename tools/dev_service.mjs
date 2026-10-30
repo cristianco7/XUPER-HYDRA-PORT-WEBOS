@@ -63,6 +63,28 @@ const server = http.createServer((req, res) => {
       });
     });
   }
+  if (u.pathname === "/liveCategories") {
+    return magis.getLiveCategories((err, categories) => done(err, { categories }));
+  }
+  if (u.pathname === "/liveChannels") {
+    return magis.getLiveChannels(u.searchParams.get("columnId") || null, (err, channels) => done(err, { channels }));
+  }
+  if (u.pathname === "/resolveLive") {
+    const streamUrl = u.searchParams.get("streamUrl") || "";
+    if (streamUrl) {
+      return done(null, { url: streamUrl, proxyPath: streamUrl, isHls: true });
+    }
+    const channelCode = u.searchParams.get("channelCode") || "";
+    return magis.resolveLive(channelCode, (err, stream) => {
+      if (err) return done(err);
+      proxy.start((perr) => {
+        if (perr) return done(perr);
+        stream.proxyPath = proxy.baseUrl() + "/media/" + proxy.add(stream.url, stream.headers, 0) + "/stream.m3u8";
+        stream.isHls = true;
+        done(null, stream);
+      });
+    });
+  }
   json(res, 404, { returnValue: false, errorText: "not found" });
 });
 

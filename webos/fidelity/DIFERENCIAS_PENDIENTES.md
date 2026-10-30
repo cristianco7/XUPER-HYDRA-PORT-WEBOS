@@ -24,10 +24,10 @@ Estados:
 | A5 | Inicio | Iconos de pestaña | Se generan en runtime (`xa.l.d(context, title)`) | Recursos del backend o captura de referencia |
 | A6 | Inicio | Orden y número de pestañas | Lo define el backend | Catálogo autorizado |
 | A7 | Inicio | Pósteres y fondos | Contenido del backend | Catálogo autorizado |
-| A8 | Inicio | Logos de canal y datos live | Contenido del backend | Fuente autorizada de canales |
+| A8 | Inicio | Logos de canal y datos live | **Resuelto:** `v6/getLiveData` entrega nombre, logo y EPG de los canales reales (1 000+), con 38 categorías | — |
 | A9 | Inicio | Etiqueta de la entrada *Perfil* | El layout no muestra texto estático para esa entrada | Referencia visual |
 | A10 | Detalle | Marquesina del texto de los botones | `MarqueTextView`/`marquee` no se anima en el port | Implementar animación CSS o confirmar que no se ve en la referencia |
-| A11 | Detalle | Lista de episodios/temporadas | Solo se reconstruyó la ficha de película | Layout `layout_vod_detail_bottom_panel.xml` + datos |
+| A11 | Detalle | Lista de episodios/temporadas | **Resuelto (desviación consciente):** el detalle conserva temporada + grupos de episodios; el reproductor abre un navegador tipo Netflix a pantalla completa en lugar de las píldoras apretadas del panel original | — |
 | A12 | Detalle | Aviso de suscripción (`mLayoutNotice`) | Está `gone` en el XML | Solo si el backend lo activa |
 | A13 | Búsqueda | Barra de navegación y filtros | Fuera del alcance de esta pasada | `layout_vod_search_result.xml` completo |
 | A14 | Búsqueda | Búsqueda de canales en vivo | Fuera de alcance | `fragment_search_live.xml` |
@@ -87,8 +87,19 @@ Estados:
 | D2 | Extracción de sesión/tokens | Prohibido por las reglas del proyecto | No se hará |
 | D3 | Interceptación TLS | Prohibida | No se hará |
 | D4 | Instalación en el LG 43LM6300PDB | **Resuelto:** `ares-install` falla en el paso `ls` posterior a la subida, pero el servicio Luna `com.webos.appInstallService/dev/install` instala correctamente | Usar `tools/tv_deploy.mjs` (subida SFTP + instalación Luna) |
-| D5 | Pruebas de códec/HLS en webOS 4 | **Resuelto para VOD:** H.264 directo; HEVC/TS con tirones en el camino nativo, fluido al remuxear a MP4 fragmentado | HLS live sigue sin probar (canales son marcadores) |
-| D6 | IPK | **Resuelto:** `dist/com.webosflux.xuptertv.fidelity_1.4.6_all.ipk` incluye app + servicio + FFmpeg 7.0.2 armhf y se instala en un paso | Cerrar A/B pendientes antes de publicar como release |
+| D5 | Pruebas de códec/HLS en webOS 4 | **Resuelto:** H.264 directo; HEVC/TS con tirones en el camino nativo, fluido al remuxear a MP4 fragmentado. TV en vivo reproduce HLS real del portal | Validar casos 4K y cambios de audio en vivo |
+| D6 | IPK | **Resuelto:** `dist/com.webosflux.xuptertv.fidelity_1.5.9_all.ipk` incluye app + servicio + FFmpeg 7.0.2 armhf y se instala en un paso | Cerrar A/B pendientes antes de publicar como release |
+
+---
+
+## I. Resuelto en 1.5.9
+
+| ID | Qué | Evidencia |
+| --- | --- | --- |
+| G10 | TV en vivo: rail de categorías navegable. Filtrar ya no reconstruye las 39 píldoras (que dejaban el foco fuera del DOM) | `renderPlayerCategories` reutiliza nodos, conserva el foco por id y desplaza la píldora activa; sonda `scratch/probe-live-nav.mjs` (`OK-CAT-FOCUS inDom:true`, 105 canales de Deportes) |
+| G11 | Selector a pantalla completa con las 38 columnas del portal (Arriba en el rail) | `#player-categories` + `renderCategoryPicker`; sonda: 39 tiles, grid con scroll y filtrado a «Chile» (38 canales) |
+| G12 | OK con el panel abierto activa la fila/píldora enfocada aunque el canal actual esté caído | El reintento de stream queda limitado a la superficie de vídeo (`!closest(state.focus, '.player-channels')`) |
+| G13 | Chromium 53: se sustituye `gap` por `margin-right` en `.pc-categories` | `scrollWidth` 5 046 px, píldoras correctamente separadas |
 
 ---
 
@@ -118,15 +129,15 @@ Estados:
 ## E. Riesgos si se publica ahora
 
 1. El IPK antiguo de `webos/fidelity/` muestra el prototipo; el artefacto
-   válido es `dist/com.webosflux.xuptertv.fidelity_1.4.6_all.ipk`.
-2. La build 1.4.6 contiene el port, el servicio y FFmpeg, y está verificada en
+   válido es `dist/com.webosflux.xuptertv.fidelity_1.5.9_all.ipk`.
+2. La build 1.5.9 contiene el port, el servicio y FFmpeg, y está verificada en
    la TV, pero **no es una release**: le faltan los flujos B1–B8 y A18.
 3. `assets/original/` viaja en el IPK; sin él no se reproduce la estética real.
 4. Afirmar "100 % fidelidad" sin A1 (referencia visual completa) sería falso.
-5. Los canales de TV en vivo son marcadores: no hay `v6/getLiveData` ni
-   reproducción HLS real.
+5. El TV en vivo ya usa canales reales, pero la reproducción directa de
+   TS/HEVC sigue necesitando el «Modo fluido» para ir sin tirones.
 
-**Recomendación:** usar la build 1.4.6 solo para probar en el televisor. No
+**Recomendación:** usar la build 1.5.9 para probar en el televisor. No
 publicarla como release hasta cerrar A1/A2, A18 y los flujos B1–B8, y volver a
 capturar todas las pantallas con la referencia al lado.
 
@@ -137,7 +148,7 @@ capturar todas las pantallas con la referencia al lado.
 1. **A1** — conseguir capturas de referencia autorizadas.
 2. **A2/A3** — ajustar tipografía y alturas de texto.
 3. **A18** — reconstruir `MFInfoBar` para VOD.
-4. **A10/A11** — marquesina y episodios del detalle.
+4. **A10/A24** — marquesina del detalle y logos de EXPLORAR.
 5. **B1/B2** — flujo de contraseña parental.
-6. **D4** — probar en el televisor.
+6. **A23** — diálogo de FEEDBACK del reproductor.
 7. Recién entonces, empaquetar y comparar de nuevo.
