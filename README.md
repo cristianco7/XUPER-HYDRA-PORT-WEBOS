@@ -126,6 +126,11 @@ Detalles que resuelve solo, porque son la causa habitual de que falle:
   reactiva esos algoritmos **solo para esa conexión**.
 - **Copia**: fuerza el protocolo `scp` antiguo (`-O`), porque el servidor de la
   TV no tiene SFTP.
+- **KEY SERVER**: si la TV lo tiene activado no acepta la clave como contraseña.
+  En ese caso publica una clave privada cifrada en `http://IP:9991/webos_rsa`
+  (lo mismo que hace `ares-novacom --getkey`). El instalador la descarga, la
+  descifra con la passphrase de Developer Mode y entra con `ssh -i`. Se prueba
+  primero la contraseña y, si falla, la llave; la clave se borra al terminar.
 
 - Guía visual paso a paso (se abre sin internet, incluye **modo presentación**
   para grabar): [`docs/instalar/index.html`](docs/instalar/index.html)
