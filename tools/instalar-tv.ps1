@@ -41,7 +41,11 @@ $AppId      = 'com.webosflux.xuptertv.fidelity'
 $SvcId      = 'com.webosflux.xuptertv.fidelity.service'
 $AppDir     = "/media/developer/apps/usr/palm/applications/$AppId"
 $SvcDir     = "/media/developer/apps/usr/palm/services/$SvcId"
-$ConfigFile = Join-Path $PSScriptRoot 'instalar-config.json'
+# Persistir por usuario, no junto al ZIP: así una actualización del instalador
+# conserva la TV y la clave cifrada sin incluir datos privados al compartirlo.
+$LegacyConfigFile = Join-Path $PSScriptRoot 'instalar-config.json'
+$ConfigDir = if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'XuperTV' } else { $PSScriptRoot }
+$ConfigFile = Join-Path $ConfigDir 'installer.json'
 $script:LastExit = 0
 $script:Fail = 0
 $script:KeyPath = ''
@@ -386,6 +390,43 @@ function Read-TvPassword {
     return (Read-Host '   Clave de la TV')
 }
 
+function Get-SavedTvPassphrase($config) {
+    # ConvertFrom-SecureString sin -Key usa DPAPI. El valor solo se puede abrir
+    # desde este usuario de Windows y este ordenador; nunca se guarda texto plano.
+    if (-not $config -or -not $config.credential) { return '' }
+    try {
+        $secure = ConvertTo-SecureString -String ([string]$config.credential)
+        return (New-Object System.Net.NetworkCredential('', $secure)).Password
+    } catch {
+        return ''
+    }
+}
+
+function Save-InstallerConfig([string]$passphrase) {
+    try {
+        if (-not (Test-Path -LiteralPath $ConfigDir)) {
+            New-Item -ItemType Directory -Path $ConfigDir -Force | Out-Null
+        }
+        $save = [ordered]@{ host = $TvHost; user = $TvUser; port = $Port }
+        if (-not $script:RootMode -and -not [string]::IsNullOrWhiteSpace($passphrase)) {
+            $secure = ConvertTo-SecureString -String $passphrase -AsPlainText -Force
+            $save.credential = ConvertFrom-SecureString -SecureString $secure
+        }
+        ([pscustomobject]$save | ConvertTo-Json) | Set-Content -LiteralPath $ConfigFile -Encoding UTF8 -ErrorAction Stop
+    } catch { }
+}
+
+function Clear-SavedTvPassphrase {
+    try {
+        if (-not $cfg) { return }
+        $save = [ordered]@{ host = $TvHost; user = $TvUser; port = $Port }
+        if (-not (Test-Path -LiteralPath $ConfigDir)) {
+            New-Item -ItemType Directory -Path $ConfigDir -Force | Out-Null
+        }
+        ([pscustomobject]$save | ConvertTo-Json) | Set-Content -LiteralPath $ConfigFile -Encoding UTF8 -ErrorAction Stop
+    } catch { }
+}
+
 function Get-UserCandidates {
     # La cuenta del modo desarrollador depende del firmware: unas TV usan
     # 'prisoner' (con o, la que usa la herramienta oficial de LG) y otras
@@ -707,8 +748,9 @@ Ok ($ipkItem.Name + '  (' + ('{0:N1}' -f ($ipkItem.Length / 1MB)) + ' MB)')
 
 # ---------------------------------------------------------- 3. la TV
 $cfg = $null
-if (Test-Path -LiteralPath $ConfigFile) {
-    try { $cfg = Get-Content -LiteralPath $ConfigFile -Raw | ConvertFrom-Json } catch { $cfg = $null }
+$configToRead = if (Test-Path -LiteralPath $ConfigFile) { $ConfigFile } elseif (Test-Path -LiteralPath $LegacyConfigFile) { $LegacyConfigFile } else { '' }
+if ($configToRead) {
+    try { $cfg = Get-Content -LiteralPath $configToRead -Raw | ConvertFrom-Json } catch { $cfg = $null }
 }
 
 Step '3/6' 'Datos del televisor'
@@ -884,11 +926,14 @@ if ($script:RootMode) {
     Info 'Si nunca la cambiaste, normalmente es: alpine'
 } else {
     Info 'Escribe la clave que muestra la app "Developer Mode" en la TV.'
+    Info 'Después de verificarla se recordará cifrada solo en este PC.'
 }
 Info 'No se ve nada mientras escribes: es normal.'
 Write-Host ''
 
 $tvPass = ''
+$savedTvPass = if ($script:RootMode) { '' } else { Get-SavedTvPassphrase $cfg }
+$usingSavedPass = $false
 $intentosPass = 0
 while (-not $tvPass) {
     $intentosPass = $intentosPass + 1
@@ -905,7 +950,15 @@ while (-not $tvPass) {
         Pause-End
         exit 1
     }
-    $tvPass = Read-TvPassword
+    $usingSavedPass = $false
+    if ($savedTvPass) {
+        $tvPass = $savedTvPass
+        $savedTvPass = ''
+        $usingSavedPass = $true
+        Info 'Usando la clave cifrada guardada en este PC...'
+    } else {
+        $tvPass = Read-TvPassword
+    }
     if ($tvPass) { $tvPass = $tvPass.Trim() }
     if ([string]::IsNullOrEmpty($tvPass)) {
         Fail 'La clave no puede estar vacia.'
@@ -981,6 +1034,10 @@ while (-not $tvPass) {
 
     if (-not $authOk) {
         Fail 'La TV ha rechazado esa clave.'
+        if ($usingSavedPass) {
+            Warn 'La clave guardada ya no sirve. Se eliminó y se pedirá una nueva.'
+            Clear-SavedTvPassphrase
+        }
         if ($script:RootMode) {
             Info 'Comprueba SSH Server en Homebrew Channel y la contraseña root.'
         } else {
@@ -1135,10 +1192,7 @@ if ($installExit -eq 0) {
     Info ''
     Info 'Para ACTUALIZAR: vuelve a ejecutar este mismo instalador.'
     Info 'Para DESINSTALAR: manten pulsado el boton sobre el icono de la app en la TV.'
-    try {
-        $save = [pscustomobject]@{ host = $TvHost; user = $TvUser; port = $Port }
-        ($save | ConvertTo-Json) | Set-Content -LiteralPath $ConfigFile -Encoding UTF8 -ErrorAction SilentlyContinue
-    } catch { }
+    Save-InstallerConfig $tvPass
 } else {
     Write-Host ''
     Fail 'La instalacion no termino bien.'
