@@ -21,6 +21,7 @@ var crypto = require('crypto');
 var https = require('https');
 var http = require('http');
 var url = require('url');
+var dnsx = require('./dnsx');
 
 /* --------------------------------------------------------------- constants */
 var KEY_HEX = 'e7af1ed7de1ffddd7bd3fe37ebdffde9ef3fe1ae39edfeb8';
@@ -185,8 +186,21 @@ function post(path, body, done) {
   var host = HOSTS[0];
   var attempt = 0;
 
-  function tryHost() {
-    var req = https.request({
+  function nextHost(err) {
+    attempt++;
+    if (attempt < HOSTS.length) {
+      host = HOSTS[attempt];
+      setup();
+      return;
+    }
+    done(err);
+  }
+
+  function setup() {
+    /* The portal hostname is resolved over DoH so an ISP that poisons its DNS
+       cannot stop the catalogue.  TLS SNI and the HTTP Host header keep the
+       original name. */
+    var baseOptions = {
       hostname: host,
       servername: host,
       rejectUnauthorized: false,
@@ -200,60 +214,58 @@ function post(path, body, done) {
         'Content-Type': CONTENT_TYPE,
         'Content-Length': Buffer.byteLength(payload)
       }
-    }, function (res) {
-      var chunks = [];
-      res.on('data', function (c) { chunks.push(c); });
-      res.on('end', function () {
-        var raw = Buffer.concat(chunks).toString('utf8');
-        var answer;
-        try {
-          answer = JSON.parse(raw);
-        } catch (e) {
-          return done(new Error(path + ': respuesta no JSON (' + res.statusCode + ')'));
-        }
-        var code = answer.returnCode === undefined || answer.returnCode === null ? '' : String(answer.returnCode);
-        if (code !== '' && code !== '0') {
-          var err = new Error(path + ' -> ' + code + ' ' + text(answer.errorMessage));
-          err.portalCode = code;
-          return done(err);
-        }
-        if (typeof answer.data === 'string' && answer.data !== '') {
-          var plain;
-          try {
-            plain = decryptBlob(answer.data);
-          } catch (e2) {
-            return done(new Error(path + ': no se pudo descifrar la respuesta (' + e2.message + ')'));
-          }
-          try {
-            return done(null, JSON.parse(plain));
-          } catch (e3) {
-            return done(new Error(path + ': respuesta descifrada no JSON'));
-          }
-        }
-        done(null, answer.data !== undefined && answer.data !== null ? answer.data : answer);
-      });
-    });
+    };
 
-    req.setTimeout(REQUEST_TIMEOUT, function () {
-      req.abort();
+    dnsx.prepare(baseOptions, function (prepErr, options) {
+      if (prepErr) { return nextHost(prepErr); }
+
+      var req = https.request(options, function (res) {
+        var chunks = [];
+        res.on('data', function (c) { chunks.push(c); });
+        res.on('end', function () {
+          var raw = Buffer.concat(chunks).toString('utf8');
+          var answer;
+          try {
+            answer = JSON.parse(raw);
+          } catch (e) {
+            return done(new Error(path + ': respuesta no JSON (' + res.statusCode + ')'));
+          }
+          var code = answer.returnCode === undefined || answer.returnCode === null ? '' : String(answer.returnCode);
+          if (code !== '' && code !== '0') {
+            var err = new Error(path + ' -> ' + code + ' ' + text(answer.errorMessage));
+            err.portalCode = code;
+            return done(err);
+          }
+          if (typeof answer.data === 'string' && answer.data !== '') {
+            var plain;
+            try {
+              plain = decryptBlob(answer.data);
+            } catch (e2) {
+              return done(new Error(path + ': no se pudo descifrar la respuesta (' + e2.message + ')'));
+            }
+            try {
+              return done(null, JSON.parse(plain));
+            } catch (e3) {
+              return done(new Error(path + ': respuesta descifrada no JSON'));
+            }
+          }
+          done(null, answer.data !== undefined && answer.data !== null ? answer.data : answer);
+        });
+      });
+
+      req.setTimeout(REQUEST_TIMEOUT, function () {
+        req.abort();
+      });
+      req.on('timeout', function () {
+        req.abort();
+      });
+      req.on('error', function (e) { nextHost(e); });
+      req.write(payload);
+      req.end();
     });
-    req.on('timeout', function () {
-      req.abort();
-    });
-    req.on('error', function (e) {
-      attempt++;
-      if (attempt < HOSTS.length) {
-        host = HOSTS[attempt];
-        tryHost();
-        return;
-      }
-      done(e);
-    });
-    req.write(payload);
-    req.end();
   }
 
-  tryHost();
+  setup();
 }
 
 function call(path, bean, opts, done) {
@@ -320,28 +332,36 @@ function ensureSession(done) {
       }, 500);
     }
     // Reintento final: si hay conexión exterior a github, probar seeds remotas
-    var req = https.get('https://raw.githubusercontent.com/xuper-plugin/kino-plugin-xuper/seeds/seeds.json', { timeout: 10000 }, function (res) {
-      if (res.statusCode !== 200) { return done(origErr); }
-      var chunks = [];
-      res.on('data', function (c) { chunks.push(c); });
-      res.on('end', function () {
-        try {
-          var seeds = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-          var list = Array.isArray(seeds) ? seeds : (seeds && seeds.seeds) || [];
-          if (!list.length) { return done(origErr); }
-          var seed = list[Math.floor(Math.random() * Math.min(list.length, 50))];
-          session.userId = trim(seed.userId);
-          session.userToken = trim(seed.userToken);
-          session.sn = trim(seed.sn).toLowerCase();
-          session.ready = true;
-          done(null, session);
-        } catch (pe) {
-          done(origErr);
-        }
+    var seedUrl = 'https://raw.githubusercontent.com/xuper-plugin/kino-plugin-xuper/seeds/seeds.json';
+    var seedOptions = url.parse(seedUrl);
+    seedOptions.method = 'GET';
+    seedOptions.headers = { 'User-Agent': 'XuperTV/webOS' };
+    dnsx.prepare(seedOptions, function (seedPrepErr, seedOpts) {
+      if (seedPrepErr) { return done(origErr); }
+      var req = https.request(seedOpts, function (res) {
+        if (res.statusCode !== 200) { res.resume(); return done(origErr); }
+        var chunks = [];
+        res.on('data', function (c) { chunks.push(c); });
+        res.on('end', function () {
+          try {
+            var seeds = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+            var list = Array.isArray(seeds) ? seeds : (seeds && seeds.seeds) || [];
+            if (!list.length) { return done(origErr); }
+            var seed = list[Math.floor(Math.random() * Math.min(list.length, 50))];
+            session.userId = trim(seed.userId);
+            session.userToken = trim(seed.userToken);
+            session.sn = trim(seed.sn).toLowerCase();
+            session.ready = true;
+            done(null, session);
+          } catch (pe) {
+            done(origErr);
+          }
+        });
       });
+      req.on('error', function () { done(origErr); });
+      req.setTimeout(10000, function () { req.abort(); done(origErr); });
+      req.end();
     });
-    req.on('error', function () { done(origErr); });
-    req.on('timeout', function () { req.abort(); done(origErr); });
   }
 
   call('v3/snToken', fp, { baseFields: false }, function (err, mint) {
@@ -1052,26 +1072,31 @@ function fetchM3u(urlStr, done) {
   var mod = isHttps ? https : http;
   var opts = url.parse(urlStr);
   opts.rejectUnauthorized = false;
+  opts.method = 'GET';
   opts.headers = {
     'User-Agent': 'Mozilla/5.0 (SmartHub; SMART-TV; U; Linux/SmartTV) AppleWebKit/538.1+ (KHTML, like Gecko) Safari/538.1+'
   };
-  var req = mod.get(opts, function (res) {
-    if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-      return fetchM3u(res.headers.location, done);
-    }
-    if (res.statusCode !== 200) {
-      return done(new Error('HTTP ' + res.statusCode + ' al descargar addon'));
-    }
-    var chunks = [];
-    res.on('data', function (c) { chunks.push(c); });
-    res.on('end', function () {
-      var raw = Buffer.concat(chunks).toString('utf8');
-      var chs = parseM3u(raw);
-      done(null, chs);
+  dnsx.prepare(opts, function (prepErr, prepped) {
+    if (prepErr) { return done(prepErr); }
+    var req = mod.get(prepped, function (res) {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        res.resume();
+        return fetchM3u(url.resolve(urlStr, res.headers.location), done);
+      }
+      if (res.statusCode !== 200) {
+        return done(new Error('HTTP ' + res.statusCode + ' al descargar addon'));
+      }
+      var chunks = [];
+      res.on('data', function (c) { chunks.push(c); });
+      res.on('end', function () {
+        var raw = Buffer.concat(chunks).toString('utf8');
+        var chs = parseM3u(raw);
+        done(null, chs);
+      });
     });
+    req.on('error', function (err) { done(err); });
+    req.setTimeout(20000, function () { req.abort(); done(new Error('Tiempo de espera agotado al descargar addon')); });
   });
-  req.on('error', function (err) { done(err); });
-  req.setTimeout(20000, function () { req.abort(); done(new Error('Tiempo de espera agotado al descargar addon')); });
 }
 
 /* Live authorizations are short-lived but valid long enough to make channel
@@ -1172,6 +1197,7 @@ module.exports = {
     APK_VERSION: APK_VERSION,
     UA_CDN: UA_CDN,
     FIXED_MAC: FIXED_MAC,
-    ROOT_CODES: ROOT_CODES
+    ROOT_CODES: ROOT_CODES,
+    HOSTS: HOSTS
   }
 };

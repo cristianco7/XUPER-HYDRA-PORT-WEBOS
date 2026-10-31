@@ -843,6 +843,7 @@ function portalServiceCall(method, params, done) {
     { id: 'share', label: 'Compartir APP' },
     { id: 'parent', label: 'Bloqueo' },
     { id: 'playback', label: 'Configuración global' },
+    { id: 'netdiag', label: 'Diagnóstico' },
     { id: 'feedback', label: 'Ayuda y Feedback' },
     { id: 'about', label: 'Sobre nosotros' }
   ];
@@ -853,6 +854,7 @@ function portalServiceCall(method, params, done) {
     share: '<svg viewBox="0 0 32 32"><circle cx="8" cy="16" r="3"/><circle cx="24" cy="7" r="3"/><circle cx="24" cy="25" r="3"/><path d="M10.6 14.5l10.8-6M10.6 17.5l10.8 6"/></svg>',
     parent: '<svg viewBox="0 0 32 32"><rect x="7" y="14" width="18" height="14" rx="2"/><path d="M11 14V10a5 5 0 0 1 10 0v4"/><path d="M16 19v4"/></svg>',
     playback: '<svg viewBox="0 0 32 32"><rect x="4" y="6" width="24" height="20" rx="3"/><path d="M13 11l8 5-8 5z"/></svg>',
+    netdiag: '<svg viewBox="0 0 32 32"><path d="M3 13a19 19 0 0 1 26 0"/><path d="M8 18a12 12 0 0 1 16 0"/><path d="M13 23a6 6 0 0 1 6 0"/><circle cx="16" cy="27.5" r="1.2"/></svg>',
     feedback: '<svg viewBox="0 0 32 32"><path d="M6 4h15l5 5v19H6z"/><path d="M20 4v6h6M10 16h12M10 21h8"/></svg>',
     about: '<svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="12"/><path d="M16 14v8M16 10h.1"/></svg>'
   };
@@ -2665,7 +2667,12 @@ function portalServiceCall(method, params, done) {
   function buildNovelsPage(page) {
     /* The portal already includes its novela rows in the loaded home roots.
        Filter those exact records only: no synthetic catalog and no secondary
-       query that could return a different host/list. */
+       query that could return a different host/list.
+
+       Keep the six featured tiles above, but do not remove those titles from
+       the catalogue below.  The portal currently delivers ten items in its
+       official "Telenovelas" row; slicing at six made "Más novelas" look as
+       if the category only had four titles. */
     var all = novelCatalogItems();
     if (!all.length) {
       var empty = el('div', 'catalog-empty', 'No se encontraron novelas en el catálogo actual.');
@@ -2675,7 +2682,7 @@ function portalServiceCall(method, params, done) {
       var items = all.slice(0, 6);
       var real = !!(items[0] && items[0]._portal);
       bentoPage(page, items, { titles: real, dots: real ? 3 : 2, shade: real });
-      if (all.length > 6) { appendCatalogGrid(page, all.slice(6), 860, 'Más novelas'); }
+      appendCatalogGrid(page, all, 860, 'Más novelas');
     }
   }
 
@@ -3455,6 +3462,7 @@ function portalServiceCall(method, params, done) {
     settingsPanels.history = buildHistoryPanel();
     settingsPanels.share = buildSharePanel();
     settingsPanels.playback = buildPlaybackPanel();
+    settingsPanels.netdiag = buildNetdiagPanel();
     settingsPanels.parent = buildParentPanel();
     settingsPanels.feedback = buildFeedbackPanel();
     settingsPanels.about = buildAboutPanel();
@@ -3483,6 +3491,8 @@ function portalServiceCall(method, params, done) {
       var refreshedHistory = buildHistoryPanel();
       settingsRight.replaceChild(refreshedHistory, settingsPanels.history);
       settingsPanels.history = refreshedHistory;
+    } else if (activeId === 'netdiag' && settingsPanels.netdiag && settingsPanels.netdiag._ensureDiag) {
+      settingsPanels.netdiag._ensureDiag();
     }
     for (var i = 0; i < settingsItems.length; i++) {
       settingsItems[i].classList.toggle('is-selected', i === index);
@@ -3801,6 +3811,153 @@ function portalServiceCall(method, params, done) {
     mail.appendChild(ico);
     mail.appendChild(el('span', null, 'escuchamos-tv@outlook.com'));
     p.appendChild(mail);
+    return p;
+  }
+
+  /* ------------------------------------------------------- network diagnostics
+     Reads only: it asks the service for the local DNS answer and the DoH answer
+     of every portal/CDN host and shows where the connection breaks.  The
+     bypass itself lives in the service (dnsx.js) and needs no user action. */
+  var netdiagState = { running: false, report: null, error: null };
+
+  function netdiagStateText(host) {
+    if (!host) { return 'Sin datos'; }
+    switch (host.verdict) {
+      case 'ok': return 'Correcto';
+      case 'dns-distinto': return 'DNS alterado';
+      case 'dns-local-falla': return 'DNS del TV falla';
+      case 'sin-tcp': return 'Sin conexión';
+      case 'tls-falla': return 'HTTPS falla';
+      default: return 'Sin datos';
+    }
+  }
+
+  function netdiagStateClass(host) {
+    if (!host) { return ''; }
+    if (host.verdict === 'ok') { return 'ok'; }
+    if (host.verdict === 'dns-distinto' || host.verdict === 'dns-local-falla') { return 'warn'; }
+    return 'bad';
+  }
+
+  function netdiagSummary(verdict) {
+    switch (verdict) {
+      case 'ok':
+        return { cls: 'ok', text: 'La conexión está bien: el catálogo y los servidores de vídeo responden.' };
+      case 'dns-distinto':
+        return { cls: 'warn', text: 'Tu operador devuelve direcciones distintas a las reales (bloqueo por DNS). La app ya las esquiva sola.' };
+      case 'dns-local-falla':
+        return { cls: 'warn', text: 'El DNS del televisor no encuentra estos dominios. La app los resuelve por DNS seguro.' };
+      case 'doh-sin-respuesta':
+        return { cls: 'bad', text: 'El DNS seguro no devolvió respuesta. Revisa la conexión del televisor.' };
+      case 'doh-bloqueado':
+        return { cls: 'bad', text: 'La red bloquea el DNS seguro (Cloudflare y Google por HTTPS).' };
+      case 'sin-salida':
+        return { cls: 'bad', text: 'Los servidores no aceptan la conexión desde esta red.' };
+      default:
+        return { cls: '', text: 'Sin resultado todavía.' };
+    }
+  }
+
+  function renderNetdiag(summary, list, report) {
+    clear(list);
+    var summaryInfo = netdiagSummary(report.verdict);
+    summary.textContent = summaryInfo.text;
+    summary.className = 'dg-summary' + (summaryInfo.cls ? ' ' + summaryInfo.cls : '');
+
+    var hosts = report.hosts || [];
+    for (var i = 0; i < hosts.length; i++) {
+      var host = hosts[i];
+      var row = el('div', 'dg-row ' + netdiagStateClass(host));
+      var ips = (host.doh && host.doh.ok && host.doh.ips.length) ? host.doh.ips : (host.system.ips || []);
+      var local = (host.system && host.system.ok) ? host.system.ips.join(', ') : 'sin respuesta';
+      row.appendChild(el('span', 'dg-host', host.host));
+      row.appendChild(el('span', 'dg-local', local));
+      row.appendChild(el('span', 'dg-state', netdiagStateText(host)));
+      row.appendChild(el('span', 'dg-ip', ips.join(', ')));
+      list.appendChild(row);
+    }
+
+    var providers = report.providers || [];
+    var okProviders = [];
+    var badProviders = [];
+    for (var p = 0; p < providers.length; p++) {
+      if (providers[p].reachable) { okProviders.push(providers[p].ip); }
+      else { badProviders.push(providers[p].ip); }
+    }
+    var dnsRow = el('div', 'dg-row dns');
+    dnsRow.appendChild(el('span', 'dg-host', 'DNS seguro (DoH)'));
+    dnsRow.appendChild(el('span', 'dg-local', okProviders.length + '/' + providers.length + ' disponibles'));
+    dnsRow.appendChild(el('span', 'dg-state', okProviders.length ? 'Correcto' : 'Bloqueado'));
+    dnsRow.appendChild(el('span', 'dg-ip', okProviders.join(', ')));
+    if (okProviders.length) { dnsRow.className = 'dg-row dns ok'; }
+    else { dnsRow.className = 'dg-row dns bad'; }
+    list.appendChild(dnsRow);
+  }
+
+  function runNetdiag(button, summary, list) {
+    if (netdiagState.running) { return; }
+    netdiagState.running = true;
+    netdiagState.error = null;
+    button.textContent = 'Analizando…';
+    summary.className = 'dg-summary';
+    summary.textContent = 'Consultando el DNS del televisor, el DNS seguro y los servidores…';
+    clear(list);
+
+    portalServiceCall('netdiag', {}, function (error, payload) {
+      netdiagState.running = false;
+      button.textContent = 'Analizar de nuevo';
+      if (button.parentNode && button.parentNode.className.indexOf('is-active') !== -1) { setFocus(button); }
+      if (error || !payload) {
+        netdiagState.error = error || 'sin respuesta';
+        summary.className = 'dg-summary bad';
+        summary.textContent = 'No se pudo ejecutar la prueba. El servicio de la app no respondió.';
+        return;
+      }
+      netdiagState.report = payload;
+      renderNetdiag(summary, list, payload);
+    });
+  }
+
+  function buildNetdiagPanel() {
+    var p = panelBase('Diagnóstico de red');
+    p.appendChild(el('div', 'dg-note',
+      'Comprueba si tu operador de internet está bloqueando los servidores de XuperTV. ' +
+      'La app ya usa un DNS seguro (DNS-over-HTTPS) para evitarlo; esta prueba solo lo muestra.'));
+    p.appendChild(abs(el('div', 'sp-hr'), 0, 216, 1478, 1));
+
+    var button = el('div', 'dg-btn focusable', 'Analizar red');
+    abs(button, 52, 242, 330, 66);
+    var summary = el('div', 'dg-summary', 'Pulsa "Analizar red" para empezar.');
+    abs(summary, 402, 242, 1024, 66);
+
+    var head = el('div', 'dg-head');
+    abs(head, 52, 336, 1380, 40);
+    head.appendChild(el('span', 'dg-host', 'Dominio'));
+    head.appendChild(el('span', 'dg-local', 'DNS del televisor'));
+    head.appendChild(el('span', 'dg-state', 'Estado'));
+    head.appendChild(el('span', 'dg-ip', 'Dirección real (DNS seguro)'));
+
+    var list = el('div', 'dg-list');
+    abs(list, 52, 378, 1380, 450);
+
+    var foot = el('div', 'dg-foot',
+      'Si el estado dice "DNS alterado", el operador está interceptando los nombres pero la app ya conecta por la dirección real. ' +
+      'En el reproductor Normal el vídeo usa este mismo DNS seguro. En Modo Fluido, FFmpeg resuelve por el DNS del televisor.');
+    abs(foot, 52, 876, 1380, 140);
+
+    button._activate = function () { runNetdiag(button, summary, list); };
+    /* Opening the panel runs the test once: the people who need it are not
+       going to press a button they do not understand. */
+    p._ensureDiag = function () {
+      if (netdiagState.running || netdiagState.report) { return; }
+      runNetdiag(button, summary, list);
+    };
+
+    p.appendChild(button);
+    p.appendChild(summary);
+    p.appendChild(head);
+    p.appendChild(list);
+    p.appendChild(foot);
     return p;
   }
 

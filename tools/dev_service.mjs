@@ -10,6 +10,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const svcDir = path.resolve(__dirname, "..", "webos", "services", "com.webosflux.xuptertv.fidelity.service");
 const magis = require(path.join(svcDir, "magis.js"));
 const proxy = require(path.join(svcDir, "proxy.js"));
+const dnsx = require(path.join(svcDir, "dnsx.js"));
+const netdiag = require(path.join(svcDir, "netdiag.js"));
 
 const PORT = Number(process.argv[2] || 8910);
 
@@ -84,6 +86,13 @@ const server = http.createServer((req, res) => {
         done(null, stream);
       });
     });
+  }
+  if (u.pathname === "/netdiag") {
+    const hosts = (magis.constants.HOSTS || []).slice(0);
+    dnsx.summary().forEach((entry) => {
+      if (entry && entry.host && hosts.indexOf(entry.host) === -1) hosts.push(entry.host);
+    });
+    return netdiag.run({ hosts }, (err, report) => done(err, report));
   }
   json(res, 404, { returnValue: false, errorText: "not found" });
 });

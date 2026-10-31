@@ -13,6 +13,8 @@ var pkg = require('./package.json');
 var magis = require('./magis');
 var proxy = require('./proxy');
 var relay = require('./ffmpeg-relay');
+var dnsx = require('./dnsx');
+var netdiag = require('./netdiag');
 
 var service = new Service(pkg.name);
 
@@ -237,6 +239,33 @@ service.register('prewarm', function (message) {
   magis.ensureSession(function (err) {
     if (err) { return fail(message, err); }
     message.respond({ returnValue: true, sn: magis.session.sn, userId: magis.session.userId });
+  });
+});
+
+/* netdiag(): read-only report used by "Diagnóstico de red".
+ * It resolves the portal/CDN hostnames with the TV resolver and with DoH,
+ * then tests TCP/TLS, so a blocked DNS can be told apart from a dead server. */
+service.register('netdiag', function (message) {
+  var payload = message.payload || {};
+  var hosts = [];
+  var constants = magis.constants || {};
+  if (constants.HOSTS && constants.HOSTS.length) {
+    hosts = constants.HOSTS.slice(0);
+  }
+  /* CDN hosts seen recently are the ones that actually serve the video. */
+  var cached = dnsx.summary();
+  for (var i = 0; i < cached.length; i++) {
+    if (cached[i] && cached[i].host && hosts.indexOf(cached[i].host) === -1) {
+      hosts.push(cached[i].host);
+    }
+  }
+  if (payload.hosts && payload.hosts.length) {
+    hosts = payload.hosts.concat(hosts);
+  }
+  netdiag.run({ hosts: hosts }, function (err, report) {
+    if (err) { return fail(message, err); }
+    report.version = pkg.version;
+    respond(message, null, report);
   });
 });
 

@@ -15,6 +15,7 @@ var https = require('https');
 var crypto = require('crypto');
 var urlmod = require('url');
 var tsIndexer = require('./ts-indexer');
+var dnsx = require('./dnsx');
 
 var MAX_TOKENS = 6;
 var tokens = {};      // token -> { url, headers, at }
@@ -110,7 +111,10 @@ function sendSubtitle(req, res, entry) {
       'User-Agent': 'Ranger/4.9.4-17294ac0',
       'Accept': '*/*'
     },
-    agent: secure ? httpsAgent : httpAgent
+    agent: secure ? httpsAgent : httpAgent,
+    /* Resolve the CDN over DoH when the ISP poisons DNS; the hostname is kept
+       for TLS SNI and the Host header.  Falls back to the system resolver. */
+    lookup: dnsx.lookup
   };
   var failed = false;
   var upstream = (secure ? https : http).request(options, function (up) {
@@ -162,7 +166,8 @@ function mediaRequest(entry, method, extraHeaders) {
       path: parsed.path,
       method: method,
       headers: headers,
-      agent: secure ? httpsAgent : httpAgent
+      agent: secure ? httpsAgent : httpAgent,
+      lookup: dnsx.lookup
     }
   };
 }

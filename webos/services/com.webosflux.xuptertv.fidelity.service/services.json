@@ -20,7 +20,8 @@
         { "name": "fetchM3u", "public": false },
         { "name": "resolveLive", "public": false },
         { "name": "abortMedia", "public": false },
-        { "name": "prewarm", "public": false }
+        { "name": "prewarm", "public": false },
+        { "name": "netdiag", "public": false }
       ]
     }
   ]
