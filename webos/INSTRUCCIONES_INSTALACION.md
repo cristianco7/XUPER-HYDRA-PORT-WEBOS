@@ -115,7 +115,7 @@ ares-novacom --device tv --getkey
 ### 3. Instalar el IPK
 
 ```bash
-ares-install --device tv dist/com.webosflux.xuptertv.fidelity_1.6.11_all.ipk
+ares-install --device tv dist/com.webosflux.xuptertv.fidelity_1.6.12_all.ipk
 ares-launch  --device tv com.webosflux.xuptertv.fidelity
 ```
 
@@ -131,13 +131,13 @@ repositorio (SFTP + Luna):
 ```bash
 # Windows PowerShell
 $env:TV_HOST="192.168.1.50"; $env:TV_PASS="tu_clave"
-node tools/tv_deploy.mjs dist\com.webosflux.xuptertv.fidelity_1.6.11_all.ipk
+node tools/tv_deploy.mjs dist\com.webosflux.xuptertv.fidelity_1.6.12_all.ipk
 ```
 
 ```bash
 # Linux / macOS
 TV_HOST=192.168.1.50 TV_PASS=tu_clave \
-  node tools/tv_deploy.mjs dist/com.webosflux.xuptertv.fidelity_1.6.11_all.ipk
+  node tools/tv_deploy.mjs dist/com.webosflux.xuptertv.fidelity_1.6.12_all.ipk
 ```
 
 Sube el IPK a `/media/developer/temp/` y llama a

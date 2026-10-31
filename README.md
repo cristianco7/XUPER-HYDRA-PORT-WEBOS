@@ -9,7 +9,7 @@ con relay FFmpeg integrado.
 ![webOS 4](https://img.shields.io/badge/webOS-4.x-a50034?style=flat-square&logo=lg&logoColor=white)
 ![Chromium 53](https://img.shields.io/badge/Chromium-53-4285F4?style=flat-square&logo=googlechrome&logoColor=white)
 ![1920x1080](https://img.shields.io/badge/render-1920%C3%971080-0b7285?style=flat-square)
-![versión](https://img.shields.io/badge/IPK-1.6.11-c91923?style=flat-square)
+![versión](https://img.shields.io/badge/IPK-1.6.12-c91923?style=flat-square)
 ![licencia](https://img.shields.io/badge/c%C3%B3digo-MIT-2ea44f?style=flat-square)
 
 [Instalación](#instalación-en-el-televisor) ·
@@ -41,7 +41,7 @@ misma disposición, mismos recursos gráficos, mismo mando a distancia.
 |---|---|
 | **Probado en** | LG 43LM6300PDB · webOS 4.10.2-29 · 1920×1080 |
 | **ID de paquete** | `com.webosflux.xuptertv.fidelity` |
-| **Versión actual** | `1.6.11` |
+| **Versión actual** | `1.6.12` |
 | **Runtime** | Chromium 53 (web app) + Node antiguo del TV (servicio) |
 | **Dependencias en el TV** | ninguna: FFmpeg viaja dentro del IPK |
 
@@ -164,7 +164,7 @@ ares-device-info --device tv
 ### 2. Instalar el IPK
 
 ```bash
-ares-install --device tv dist/com.webosflux.xuptertv.fidelity_1.6.11_all.ipk
+ares-install --device tv dist/com.webosflux.xuptertv.fidelity_1.6.12_all.ipk
 ares-launch  --device tv com.webosflux.xuptertv.fidelity
 ```
 
@@ -173,7 +173,7 @@ webOS 4: el `ls`/`md5` posterior al upload no responde), usa el instalador
 directo por SSH + Luna que incluye el repo:
 
 ```bash
-TV_HOST=192.168.1.50 TV_PASS=tu_clave node tools/tv_deploy.mjs dist/com.webosflux.xuptertv.fidelity_1.6.11_all.ipk
+TV_HOST=192.168.1.50 TV_PASS=tu_clave node tools/tv_deploy.mjs dist/com.webosflux.xuptertv.fidelity_1.6.12_all.ipk
 ```
 
 `tv_deploy.mjs` sube el IPK por SFTP a `/media/developer/temp/` y llama a
@@ -211,16 +211,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-ipk.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File tools/setup-ffmpeg.ps1 2>/dev/null || \
   tar -xJf tools/vendor/ffmpeg-7.0.2-armhf-static.tar.xz -C /tmp
 ares-package webos/fidelity webos/services/com.webosflux.xuptertv.fidelity.service -o dist -e shots -e '*.md'
-python3 tools/fix_ipk_modes.py dist/com.webosflux.xuptertv.fidelity_1.6.11_all.ipk
+python3 tools/fix_ipk_modes.py dist/com.webosflux.xuptertv.fidelity_1.6.12_all.ipk
 ```
 
-Salida de referencia (build 1.6.11):
+Salida de referencia (build 1.6.12):
 
 | Dato | Valor |
 |---|---|
-| Archivo | `dist/com.webosflux.xuptertv.fidelity_1.6.11_all.ipk` |
-| Tamaño | 22 467 592 bytes (21,4 MiB) |
-| SHA-256 | `EA2CB094F9EE42A5B9F977EE321BC5A6BBA1C899D5E96D82CBAFA4185A041CA5` |
+| Archivo | `dist/com.webosflux.xuptertv.fidelity_1.6.12_all.ipk` |
+| Tamaño | 22 467 568 bytes (21,4 MiB) |
+| SHA-256 | `DA7086606AFC45057B3B37DD914A8D6D7FC3496C376C87B71C9E11E1EA8360B0` |
 
 El IPK incluye la web app, el servicio Luna, `ffmpeg` (31,8 MB) y
 `ffmpeg-LICENSE.txt`. Por eso pesa ~22 MB: es una instalación de un solo paso,
@@ -404,7 +404,7 @@ webosflux/
 |---|---|
 | `ares-install` termina con error tras subir | `ls`/`md5` posterior al upload falla en webOS 4. Usa `node tools/tv_deploy.mjs <ipk>`. |
 | «No se pudo abrir el stream» en todos los canales | El servicio no está corriendo o el portal no responde. Comprueba `node tools/tv_luna.mjs luna://com.webosflux.xuptertv.fidelity.service/ping`. |
-| «No se pudo abrir el stream (código 4)» en un país con bloqueos | Abre **Ajustes → Diagnóstico**: si algún dominio dice *DNS alterado*, la operadora envenena el DNS y la app ya usa el DNS seguro. Reinstala la versión 1.6.11 o superior si ese menú no existe. |
+| «No se pudo abrir el stream (código 4)» en un país con bloqueos | Abre **Ajustes → Diagnóstico**: si algún dominio dice *DNS alterado*, la operadora envenena el DNS y la app ya usa el DNS seguro. Reinstala la versión 1.6.12 o superior si ese menú no existe. |
 | El Modo fluido no arranca | `ffmpeg` sin permiso de ejecución (paso 3) o relay ocupado; mira los logs del servicio. |
 | Pantalla en negro al abrir la app | IPK antiguo o instalación a medias: reinstala la versión actual y lanza con `ares-launch`. |
 | Los canales no filtran / no se puede ir a las categorías | Versión < 1.5.9. En 1.5.9 el rail conserva el foco y **Arriba** abre el selector de las 38 categorías. |

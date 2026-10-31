@@ -103,11 +103,15 @@ function httpsCheck(host, ip, done) {
 
 function first(list) { return list && list.length ? list[0] : ''; }
 
-function sameSet(a, b) {
+/* A poisoned answer has NOTHING in common with the real one.  Cloudflare
+ * rotates a subset of its two addresses, so a partial difference is normal and
+ * must not be reported as a block. */
+function hasCommon(a, b) {
   if (!a || !b) { return false; }
-  var left = a.slice().sort().join(',');
-  var right = b.slice().sort().join(',');
-  return left === right && left !== '';
+  for (var i = 0; i < a.length; i++) {
+    if (b.indexOf(a[i]) !== -1) { return true; }
+  }
+  return false;
 }
 
 /* One host: local DNS, DoH, TCP and TLS on both answers. */
@@ -140,7 +144,7 @@ function checkHost(host, done) {
         result.doh.ok = true;
         result.doh.ips = dohIps;
       }
-      result.mismatch = result.system.ok && result.doh.ok && !sameSet(result.system.ips, result.doh.ips);
+      result.mismatch = result.system.ok && result.doh.ok && !hasCommon(result.system.ips, result.doh.ips);
 
       /* Prefer the DoH answer: it is the one the bypass will use. */
       var dialIp = first(result.doh.ips) || first(result.system.ips);
