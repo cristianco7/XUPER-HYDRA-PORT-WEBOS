@@ -804,23 +804,10 @@ function portalServiceCall(method, params, done) {
     }, vodApi.mode === 'xuper' ? { method: 'POST', body: xuperPayload('detail', item.id) } : null);
   }
 
+  /* Live TV is portal-driven.  Do not draw fictitious rows while the local
+     service starts: they looked like real channels until the user left and
+     returned to the TV tab. */
   var CHANNELS = [];
-  (function () {
-    var names = ['Canal demo 01', 'Canal demo 02', 'Canal demo 03', 'Canal demo 04',
-                 'Canal demo 05', 'Canal demo 06', 'Canal demo 07', 'Canal demo 08',
-                 'Canal demo 09', 'Canal demo 10', 'Canal demo 11', 'Canal demo 12'];
-    for (var i = 0; i < names.length; i++) {
-      CHANNELS.push({
-        index: i + 1,
-        name: names[i],
-        now: 'Programa demo ' + pad2(i + 1),
-        next: 'Programa demo ' + pad2(i + 2),
-        time: '20:00 - 21:30',
-        fav: i % 3 === 0,
-        uhd: i === 2 || i === 6
-      });
-    }
-  })();
 
   /* Tab order and labels observed on the running app (WSA, 1920x1080).
      The APK builds this list from its backend, so the icon artwork is not a
@@ -2001,6 +1988,8 @@ function portalServiceCall(method, params, done) {
   var liveCategoriesLoaded = false;
   var liveChannelsLoaded = false;
   var liveChannelsLoading = false;
+  var liveChannelRequestSeq = 0;
+  var liveChannelLoadColumnId = null;
   /* Home only keeps one muted live preview alive.  This warms the channel
      without creating a second full player or playing sound in the menu. */
   var livePreviewVideo = null;
@@ -2169,42 +2158,92 @@ function portalServiceCall(method, params, done) {
   }
 
   function loadLiveChannels(columnId, done) {
-    if (liveChannelsLoading) { return; }
+    var requestedColumnId = columnId || 76182;
+    /* buildLivePage and the initial boot can both ask for Todos.  Keep the
+       existing request instead of clearing the first page while it streams. */
+    if (liveChannelsLoading && liveChannelLoadColumnId === requestedColumnId) { return; }
+    var requestSeq = ++liveChannelRequestSeq;
+    liveChannelLoadColumnId = requestedColumnId;
     liveChannelsLoading = true;
-    var params = columnId ? { columnId: columnId } : {};
-    portalServiceCall('liveChannels', params, function (err, payload) {
-      liveChannelsLoading = false;
-      if (payload && payload.channels && payload.channels.length) {
-        CHANNELS.splice(0, CHANNELS.length);
-        for (var c = 0; c < payload.channels.length; c++) {
-          CHANNELS.push(payload.channels[c]);
+    liveChannelsLoaded = false;
+    CHANNELS.splice(0, CHANNELS.length);
+    state.channel = 0;
+    renderLiveRows(false);
+    renderPlayerChannels();
+
+    var pageNum = 1;
+    var didReturnFirstPage = false;
+    function fetchNextPage() {
+      portalServiceCall('liveChannels', {
+        columnId: requestedColumnId,
+        pageNum: pageNum,
+        pageSize: 20
+      }, function (err, payload) {
+        /* A category was selected while this page was in flight. */
+        if (requestSeq !== liveChannelRequestSeq) { return; }
+        var pageChannels = payload && payload.channels ? payload.channels : [];
+        if (!err && pageChannels.length) {
+          var known = {};
+          for (var k = 0; k < CHANNELS.length; k++) {
+            if (CHANNELS[k] && CHANNELS[k].channelCode) {
+              known[CHANNELS[k].channelCode] = true;
+            }
+          }
+          for (var c = 0; c < pageChannels.length; c++) {
+            var channel = pageChannels[c];
+            if (channel && (!channel.channelCode || !known[channel.channelCode])) {
+              if (channel.channelCode) { known[channel.channelCode] = true; }
+              CHANNELS.push(channel);
+            }
+          }
+          liveChannelsLoaded = true;
+          renderLiveRows(false);
+          renderPlayerChannels();
+          if (state.channel >= CHANNELS.length) { state.channel = 0; }
+          if (CHANNELS[state.channel] && liveInfoText) {
+            liveInfoText.textContent = CHANNELS[state.channel].name;
+          }
+          if (state.screen === 'player' && state.playerMode === 'live') {
+            updatePlayer();
+          } else {
+            scheduleLivePreview(CHANNELS[state.channel]);
+          }
         }
-        liveChannelsLoaded = true;
-        renderLiveRows(false);
-        renderPlayerChannels();
-        if (state.channel >= CHANNELS.length) { state.channel = 0; }
-        if (CHANNELS[state.channel] && liveInfoText) {
-          liveInfoText.textContent = CHANNELS[state.channel].name;
+
+        if (!didReturnFirstPage) {
+          didReturnFirstPage = true;
+          if (!liveCategoriesLoaded) { loadLiveCategories(); }
+          if (done) { done(err, payload); }
         }
-        if (state.screen === 'player' && state.playerMode === 'live') {
-          updatePlayer();
-        } else {
-          scheduleLivePreview(CHANNELS[state.channel]);
+
+        if (!err && payload && payload.hasMore && pageChannels.length) {
+          pageNum++;
+          /* Yield to webOS between pages so navigating the first block stays
+             responsive while the rest of the catalogue arrives. */
+          setTimeout(fetchNextPage, 25);
+          return;
         }
-      } else if (!liveChannelsLoaded) {
-        setTimeout(function () { loadLiveChannels(columnId); }, 2500);
-      }
-      if (!liveCategoriesLoaded) {
-        loadLiveCategories();
-      }
-      if (done) { done(err, payload); }
-    });
+
+        liveChannelsLoading = false;
+        if (err && !liveChannelsLoaded) {
+          setTimeout(function () {
+            if (requestSeq === liveChannelRequestSeq) { loadLiveChannels(requestedColumnId); }
+          }, 2500);
+        }
+      });
+    }
+    fetchNextPage();
   }
 
   function renderLiveRows(favOnly) {
     if (!liveList) { return; }
     clear(liveList);
     liveRows = [];
+    if (!CHANNELS.length) {
+      liveList.appendChild(el('div', 'live-list-status',
+        liveChannelsLoaded ? 'No se encontraron canales' : 'Cargando canales…'));
+      return;
+    }
     for (var i = 0; i < CHANNELS.length; i++) {
       if (favOnly && !CHANNELS[i].fav) { continue; }
       var row = el('div', 'live-row focusable');
@@ -5862,8 +5901,10 @@ function portalServiceCall(method, params, done) {
     }
   }
 
-  function playUrl(url) {
+  function playUrl(url, playOptions) {
     if (!playerVideo || !url) { return; }
+    playOptions = playOptions || {};
+    var useNativeHlsFallback = !!playOptions.nativeHls;
     stopPlayerVideo();
     lastPlayingUrl = url;
     var mOrigin = /^(http:\/\/127\.0\.0\.1:\d+)/.exec(url);
@@ -5883,10 +5924,28 @@ function portalServiceCall(method, params, done) {
        retain the previous resource's preload mode after source replacement. */
     try { playerVideo.preload = 'auto'; } catch (ePreload) { /* ignore */ }
 
+    var rawMime = (state.playerItem && state.playerItem.streamMime) || '';
+    var isHls = (url.indexOf('.m3u8') !== -1) || (rawMime.indexOf('mpegurl') !== -1) || !!(state.playerItem && state.playerItem.isHls);
+    var mime = isHls ? 'application/vnd.apple.mpegurl' : ((url.indexOf('.mp4') !== -1 || rawMime.indexOf('mp4') !== -1) ? 'video/mp4' : 'video/mp2t');
+
     playerVideo.onerror = function () {
       hideNextEpisodeLoading();
       releaseRelaySeek();
       var code = playerVideo.error && playerVideo.error.code;
+      /* Some newer webOS releases reject Starfish's legacy mediaOption
+         parameter for every HLS channel and report MEDIA_ERR_SRC_NOT_SUPPORTED
+         (4). Retry only live HLS once with the standard HTML5 HLS source.
+         VOD and the FFmpeg Modo Fluido path are intentionally untouched. */
+      if (code === 4 && state.playerMode === 'live' && isHls && !useNativeHlsFallback) {
+        var failedChannelSeq = liveChannelSeq;
+        setPlayerStatus('Reintentando señal con compatibilidad webOS…');
+        setTimeout(function () {
+          if (state.playerMode === 'live' && liveChannelSeq === failedChannelSeq) {
+            playUrl(url, { nativeHls: true });
+          }
+        }, 0);
+        return;
+      }
       state.streamError = 'No se pudo abrir el stream (código ' + (code || 'error') + ')';
       playerVideo.classList.remove('is-active');
       if (playerFrame) { playerFrame.style.display = 'block'; }
@@ -5962,11 +6021,7 @@ function portalServiceCall(method, params, done) {
       scheduleBufferingNotice('Conectando…');
     };
 
-    var rawMime = (state.playerItem && state.playerItem.streamMime) || '';
-    var isHls = (url.indexOf('.m3u8') !== -1) || (rawMime.indexOf('mpegurl') !== -1) || !!(state.playerItem && state.playerItem.isHls);
-    var mime = isHls ? 'application/vnd.apple.mpegurl' : ((url.indexOf('.mp4') !== -1 || rawMime.indexOf('mp4') !== -1) ? 'video/mp4' : 'video/mp2t');
-
-    var options = {
+    var transportOptions = {
       mediaTransportType: isHls ? 'HLS' : 'URI',
       option: {
         transmission: {
@@ -5974,14 +6029,20 @@ function portalServiceCall(method, params, done) {
         }
       }
     };
-    var mediaOption = encodeURI(JSON.stringify(options));
-    var typeStr = mime + ';mediaOption=' + mediaOption;
+    var mediaOption = encodeURI(JSON.stringify(transportOptions));
+    var typeStr = useNativeHlsFallback ? mime : (mime + ';mediaOption=' + mediaOption);
 
     while (playerVideo.firstChild) {
       playerVideo.removeChild(playerVideo.firstChild);
     }
     playerVideo.removeAttribute('src');
-    try { playerVideo.mediaOption = options; } catch (eOpt) {}
+    /* Newer webOS uses the MIME type and rejects the old custom property.
+       Older sets retain the existing path above as their first attempt. */
+    if (!useNativeHlsFallback) {
+      try { playerVideo.mediaOption = transportOptions; } catch (eOpt) {}
+    } else {
+      try { playerVideo.mediaOption = null; } catch (eClearOpt) {}
+    }
 
     var srcNode = document.createElement('source');
     srcNode.src = url;
@@ -6424,10 +6485,10 @@ function portalServiceCall(method, params, done) {
       if (f._activate) { f._activate(); }
     });
     buildSearch();
+    startServiceKeepAlive();
     startWelcome();
     loadVodCatalog();
     loadLiveChannels();
-    startServiceKeepAlive();
 
     window.__xuper = {
       version: '4.34.4',

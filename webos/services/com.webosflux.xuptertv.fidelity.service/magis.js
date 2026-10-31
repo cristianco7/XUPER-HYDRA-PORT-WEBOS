@@ -927,62 +927,64 @@ function bareHost(mainAddr) {
   return slash >= 0 ? s.slice(0, slash) : s;
 }
 
-function getLiveChannels(columnId, done) {
-  if (typeof columnId === 'function') { done = columnId; columnId = null; }
+function getLiveChannels(columnId, pageNum, pageSize, done) {
+  if (typeof columnId === 'function') {
+    done = columnId;
+    columnId = null;
+    pageNum = 1;
+    pageSize = 20;
+  } else if (typeof pageNum === 'function') {
+    done = pageNum;
+    pageNum = 1;
+    pageSize = 20;
+  } else if (typeof pageSize === 'function') {
+    done = pageSize;
+    pageSize = 20;
+  }
+  pageNum = Math.max(1, parseInt(pageNum, 10) || 1);
+  pageSize = Math.max(1, Math.min(50, parseInt(pageSize, 10) || 20));
   ensureSession(function (err) {
     if (err) { return done(err); }
-    /* The portal can cap a large requested page silently.  Fetch fixed
-       pages until the final short (or empty) one so category views such as
-       Deportes do not stop after their first block of channels. */
-    var pageSize = 20;
-    var pageNum = 1;
+    /* Return one portal page at a time.  The client paints page one first,
+       then asks for the remaining pages in the background.  This avoids a
+       blank TV screen while a large category (for example Deportes) loads. */
     var out = [];
     var seen = {};
-    function fetchPage() {
-      post('v6/getLiveData', {
-        userToken: session.userToken,
-        userId: session.userId,
-        portalCode: PORTAL_CODE,
-        columnId: columnId || 76182,
-        dataVersion: '',
-        pageSize: pageSize,
-        pageNum: pageNum,
-        expireTimeStr: ''
-      }, function (err2, res) {
-        if (err2) { return done(err2); }
-        var list = (res && res.channelList) || [];
-        for (var i = 0; i < list.length; i++) {
-          var c = list[i];
-          if (!c || !c.channelCode || seen[c.channelCode]) continue;
-          seen[c.channelCode] = true;
-          var poster = text(c.posterUrl);
-          if (!poster && c.posterList && c.posterList.length) {
-            poster = text(c.posterList[0].fileUrl);
-          }
-          out.push({
-            channelCode: c.channelCode,
-            index: c.channelNumber || out.length + 1,
-            name: text(c.name || c.alias || ('Canal ' + (out.length + 1))),
-            logo: poster,
-            uhd: c.quality === '3',
-            fav: c.isFav || false,
-            now: 'En vivo',
-            next: '',
-            time: '',
-            liveAddressList: c.liveAddressList || []
-          });
+    post('v6/getLiveData', {
+      userToken: session.userToken,
+      userId: session.userId,
+      portalCode: PORTAL_CODE,
+      columnId: columnId || 76182,
+      dataVersion: '',
+      pageSize: pageSize,
+      pageNum: pageNum,
+      expireTimeStr: ''
+    }, function (err2, res) {
+      if (err2) { return done(err2); }
+      var list = (res && res.channelList) || [];
+      for (var i = 0; i < list.length; i++) {
+        var c = list[i];
+        if (!c || !c.channelCode || seen[c.channelCode]) continue;
+        seen[c.channelCode] = true;
+        var poster = text(c.posterUrl);
+        if (!poster && c.posterList && c.posterList.length) {
+          poster = text(c.posterList[0].fileUrl);
         }
-        /* A full page can have one final exact multiple; the following empty
-           request is harmless. Bound it as a defensive guard. */
-        if (list.length >= pageSize && pageNum < 100) {
-          pageNum++;
-          fetchPage();
-          return;
-        }
-        done(null, out);
-      });
-    }
-    fetchPage();
+        out.push({
+          channelCode: c.channelCode,
+          index: c.channelNumber || out.length + 1,
+          name: text(c.name || c.alias || ('Canal ' + (out.length + 1))),
+          logo: poster,
+          uhd: c.quality === '3',
+          fav: c.isFav || false,
+          now: 'En vivo',
+          next: '',
+          time: '',
+          liveAddressList: c.liveAddressList || []
+        });
+      }
+      done(null, out, list.length >= pageSize);
+    });
   });
 }
 

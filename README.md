@@ -97,6 +97,50 @@ Detalle fino de lo que falta en
 
 ## Instalación en el televisor
 
+### La forma fácil (sin comandos)
+
+Pensado para quien solo tiene el archivo y no quiere tocar una terminal:
+
+1. Consigue la carpeta `XuperTV-instalador-<versión>` (o el ZIP
+   `dist/XuperTV-instalador-<versión>.zip`, que se genera con
+   `tools/make-kit.ps1`).
+2. Extráela y haz **doble clic en `INSTALAR-XUPERTV.bat`**.
+3. Escribe la **IP** del televisor y la **clave** que muestra la app
+   *Developer Mode* (se pide una sola vez: el instalador la comprueba con la TV
+   antes de copiar nada).
+   Si no sabes la IP —o ha cambiado al reiniciar la TV— escribe **`B`** y el
+   instalador la busca solo en tu red local (puerto 9922 o 22).
+4. Espera a que diga **LISTO**: la app se abre sola en la TV.
+
+No hace falta Node.js ni `ares-cli`: usa el cliente SSH que ya trae Windows
+10/11. El instalador sube el IPK, lo instala con el servicio de webOS, verifica
+la versión, comprueba que `ffmpeg` quedó ejecutable y abre la app. También avisa
+si el PC y la TV están en redes distintas.
+
+Detalles que resuelve solo, porque son la causa habitual de que falle:
+
+- **Puerto**: las TV LG tienen el SSH del modo desarrollador en el **9922**
+  (no en el 22). Prueba 9922 y 22 y usa el que responda.
+- **Criptografía antigua**: webOS 4 lleva OpenSSH 6.1, que solo ofrece
+  `ssh-rsa`/SHA-1 y OpenSSH 9 de Windows rechaza por defecto. El instalador
+  reactiva esos algoritmos **solo para esa conexión**.
+- **Copia**: usa el subsistema **SFTP** del modo desarrollador (la TV no trae
+  `scp` ni `sftp-server` en el `PATH`); si fallara, reintenta con `scp -O`.
+- **Cuenta**: el nombre de usuario cambia según el firmware (`prisoner` en la
+  mayoría, `prisioner` en algunas TV). Se prueban los dos y se recuerda el que
+  funcione en `tools/instalar-config.json`.
+- **KEY SERVER**: si la TV lo tiene activado no acepta la clave como contraseña.
+  En ese caso publica una clave privada cifrada en `http://IP:9991/webos_rsa`
+  (lo mismo que hace `ares-novacom --getkey`). El instalador la descarga, la
+  descifra con la passphrase de Developer Mode y entra con `ssh -i`. Se prueba
+  primero la contraseña y, si falla, la llave; la clave se borra al terminar.
+
+- Guía visual paso a paso (se abre sin internet, incluye **modo presentación**
+  para grabar): [`docs/instalar/index.html`](docs/instalar/index.html)
+- Guion del vídeo tutorial: [`docs/instalar/guion-video.md`](docs/instalar/guion-video.md)
+
+### Instalación manual (ares-cli)
+
 Requisitos:
 
 - LG con **webOS 4.0 o superior** (probado en 4.10.2-29) y 1 GB de RAM.
@@ -111,7 +155,7 @@ Requisitos:
 ### 1. Emparejar el televisor
 
 ```bash
-ares-setup-device            # añade el TV por IP; usuario: prisioner
+ares-setup-device            # añade el TV por IP; usuario: prisoner
 ares-novacom --device tv --getkey   # instala la clave SSH
 ares-device-info --device tv
 ```
@@ -288,6 +332,7 @@ obligatoriamente `resolveSmooth` y una URL local `127.0.0.1:8787/s/<token>.mp4`.
 
 ```
 webosflux/
+├─ INSTALAR-XUPERTV.bat              instalador de doble clic para usuarios
 ├─ webos/
 │  ├─ fidelity/                     app web final (la que se empaqueta)
 │  │  ├─ index.html, css/, js/, data/, config/, assets/, images/
@@ -295,6 +340,8 @@ webosflux/
 │  ├─ services/                     servicio Luna + FFmpeg + proxy + relay
 │  └─ …                             prototipo antiguo (histórico, no es la app)
 ├─ tools/
+│  ├─ instalar-tv.ps1               motor del instalador (SSH + Luna, sin Node)
+│  ├─ make-kit.ps1                  empaqueta el ZIP que se comparte
 │  ├─ build-ipk.ps1                 build de un paso (app + servicio + modos)
 │  ├─ setup-ffmpeg.ps1              restaura el binario desde tools/vendor
 │  ├─ fix_ipk_modes.py              fuerza 0755 en ffmpeg dentro del IPK
@@ -303,14 +350,18 @@ webosflux/
 │  ├─ tv_exec.mjs / tv_luna.mjs     utilidades SSH para depurar el televisor
 │  ├─ ssh2-loader.mjs               localiza ssh2 sin rutas absolutas
 │  └─ vendor/                       FFmpeg 7.0.2 armhf estático (tar.xz)
-├─ docs/screenshots/                capturas usadas en este README
-└─ dist/                            IPKs generados (no versionados)
+├─ docs/
+│  ├─ instalar/                     guía visual + guion del vídeo
+│  └─ screenshots/                  capturas usadas en este README
+└─ dist/                            IPKs y kits generados (no versionados)
 ```
 
 ## Documentación
 
 | Documento | Contenido |
 |---|---|
+| [`docs/instalar/index.html`](docs/instalar/index.html) | Guía visual de instalación para usuarios (sin comandos) |
+| [`docs/instalar/guion-video.md`](docs/instalar/guion-video.md) | Guion del vídeo tutorial, escena por escena |
 | [`webos/fidelity/README_FIDELITY.md`](webos/fidelity/README_FIDELITY.md) | Estado del port y estructura interna |
 | [`webos/fidelity/MAPA_PANTALLAS.md`](webos/fidelity/MAPA_PANTALLAS.md) | Pantalla → layout del APK → recursos → CSS/JS |
 | [`webos/fidelity/COMPARACION_VISUAL.md`](webos/fidelity/COMPARACION_VISUAL.md) | Medidas XML frente al render 1920×1080 |
