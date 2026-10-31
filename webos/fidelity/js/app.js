@@ -958,9 +958,6 @@ function portalServiceCall(method, params, done) {
 
   var homeBuilt = false;
   var pagesEl, pages = [], tabEls = [], notifyEl;
-  /* Novelas lives in the portal search index rather than in the six fixed
-     home roots. Keep its small result set separate from the main catalogue. */
-  var novelPortalItems = null, novelPortalLoading = false;
   var liveRows = [], liveInfoText, liveMain, liveFocus, liveList;
   var detailLeft, detailPlayer, detailButtons, detailBottom;
   var searchKeyboard, searchHot, searchResults, searchEmpty, searchHotGrid,
@@ -2655,7 +2652,7 @@ function portalServiceCall(method, params, done) {
     for (var i = 0; i < VOD.length; i++) {
       var item = VOD[i];
       var text = norm([
-        item.category || '', item.kind || '', item.title || '', item.alias || '',
+        item.row || '', item.category || '', item.kind || '', item.title || '', item.alias || '',
         item.genres && item.genres.join ? item.genres.join(' ') : (item.genres || '')
       ].join(' '));
       if (text.indexOf('novela') !== -1 || text.indexOf('telenovela') !== -1) {
@@ -2666,10 +2663,12 @@ function portalServiceCall(method, params, done) {
   }
 
   function buildNovelsPage(page) {
-    var all = novelPortalItems || novelCatalogItems();
+    /* The portal already includes its novela rows in the loaded home roots.
+       Filter those exact records only: no synthetic catalog and no secondary
+       query that could return a different host/list. */
+    var all = novelCatalogItems();
     if (!all.length) {
-      var empty = el('div', 'catalog-empty', novelPortalLoading ?
-        'Cargando novelas del portal…' : 'No se encontraron novelas en el catálogo.');
+      var empty = el('div', 'catalog-empty', 'No se encontraron novelas en el catálogo actual.');
       abs(empty, 192, 170, 1500, 80);
       page.appendChild(empty);
     } else {
@@ -2678,33 +2677,6 @@ function portalServiceCall(method, params, done) {
       bentoPage(page, items, { titles: real, dots: real ? 3 : 2, shade: real });
       if (all.length > 6) { appendCatalogGrid(page, all.slice(6), 860, 'Más novelas'); }
     }
-    loadNovelsFromPortal();
-  }
-
-  function loadNovelsFromPortal() {
-    if (novelPortalItems || novelPortalLoading || vodApi.mode !== 'portal') { return; }
-    novelPortalLoading = true;
-    portalServiceCall('search', { value: 'novela' }, function (error, payload) {
-      novelPortalLoading = false;
-      if (!error && payload && payload.returnValue !== false && payload.items && payload.items.length) {
-        novelPortalItems = [];
-        for (var i = 0; i < payload.items.length; i++) {
-          var item = normalizeVod(payload.items[i], i + 1);
-          item._portal = true;
-          novelPortalItems.push(item);
-        }
-      } else {
-        /* Avoid sending the same request each time the viewer moves through
-           the rail. A later app launch will ask the portal again. */
-        novelPortalItems = novelCatalogItems();
-      }
-      var novelPage = pages[6];
-      if (novelPage && pagesBuilt[6]) {
-        clear(novelPage);
-        buildNovelsPage(novelPage);
-        schedulePosterMemoryPass();
-      }
-    });
   }
 
   /* KIDS: hero 831x534 + 2x2 grid 413x222 on the right, a subtitle line and a
