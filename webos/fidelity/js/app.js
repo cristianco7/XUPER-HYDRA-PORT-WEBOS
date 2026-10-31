@@ -820,7 +820,9 @@ function portalServiceCall(method, params, done) {
     strip: '<svg viewBox="0 0 33 33"><rect x="4" y="7" width="25" height="19" rx="2" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M9 7v19M24 7v19" stroke="currentColor" stroke-width="1.8"/><rect x="5.6" y="9" width="2.4" height="2.6" fill="currentColor"/><rect x="5.6" y="15.2" width="2.4" height="2.6" fill="currentColor"/><rect x="5.6" y="21.4" width="2.4" height="2.6" fill="currentColor"/><rect x="25" y="9" width="2.4" height="2.6" fill="currentColor"/><rect x="25" y="15.2" width="2.4" height="2.6" fill="currentColor"/><rect x="25" y="21.4" width="2.4" height="2.6" fill="currentColor"/></svg>',
     kids: '<svg viewBox="0 0 33 33"><circle cx="8.6" cy="8.6" r="4" fill="none" stroke="currentColor" stroke-width="2.2"/><circle cx="24.4" cy="8.6" r="4" fill="none" stroke="currentColor" stroke-width="2.2"/><circle cx="16.5" cy="18" r="9.6" fill="none" stroke="currentColor" stroke-width="2.2"/><circle cx="13" cy="17" r="1.5" fill="currentColor"/><circle cx="20" cy="17" r="1.5" fill="currentColor"/><ellipse cx="16.5" cy="21.6" rx="2.4" ry="1.7" fill="currentColor"/></svg>',
     anime: '<svg viewBox="0 0 33 33"><circle cx="8.5" cy="9" r="4.5" fill="currentColor"/><circle cx="24.5" cy="9" r="4.5" fill="currentColor"/><path d="M16.5 9c5.8 0 10.5 4.6 10.5 10.3 0 5.7-4.7 9.7-10.5 9.7S6 25 6 19.3C6 13.6 10.7 9 16.5 9z" fill="currentColor"/><circle cx="12.5" cy="18" r="1.6" fill="#0b0b0b"/><circle cx="20.5" cy="18" r="1.6" fill="#0b0b0b"/><ellipse cx="16.5" cy="23" rx="3" ry="2" fill="#0b0b0b"/></svg>',
-    compass: '<svg viewBox="0 0 33 33"><circle cx="16.5" cy="16.5" r="11.5" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M22 11l-3.2 7.8L11 22l3.2-7.8z" fill="currentColor"/></svg>'
+    compass: '<svg viewBox="0 0 33 33"><circle cx="16.5" cy="16.5" r="11.5" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M22 11l-3.2 7.8L11 22l3.2-7.8z" fill="currentColor"/></svg>',
+    novel: '<svg viewBox="0 0 33 33"><path d="M5 6.5h9.5c2.2 0 3.7 1 4.5 2.3.8-1.3 2.3-2.3 4.5-2.3H28v20h-5.5c-2.1 0-3.4.6-4.5 1.8-1.1-1.2-2.4-1.8-4.5-1.8H5z" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M18 9v19" stroke="currentColor" stroke-width="2.2"/></svg>',
+    history: '<svg viewBox="0 0 33 33"><circle cx="16.5" cy="17" r="10.5" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M16.5 10.5V17l5 3" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M8 7v6h6" fill="none" stroke="currentColor" stroke-width="2.4"/></svg>'
   };
 
   var TABS = [
@@ -830,7 +832,9 @@ function portalServiceCall(method, params, done) {
     { label: 'SERIES', page: 3, icon: 'strip' },
     { label: 'KIDS', page: 4, icon: 'kids' },
     { label: 'ANIME', page: 5, icon: 'anime' },
-    { label: 'EXPLORAR', page: 6, icon: 'compass' }
+    { label: 'NOVELAS', page: 6, icon: 'novel' },
+    { label: 'EXPLORAR', page: 7, icon: 'compass' },
+    { label: 'HISTORIAL', page: -1, icon: 'history', action: 'history' }
   ];
 
   var SETTINGS_ITEMS = [
@@ -954,6 +958,9 @@ function portalServiceCall(method, params, done) {
 
   var homeBuilt = false;
   var pagesEl, pages = [], tabEls = [], notifyEl;
+  /* Novelas lives in the portal search index rather than in the six fixed
+     home roots. Keep its small result set separate from the main catalogue. */
+  var novelPortalItems = null, novelPortalLoading = false;
   var liveRows = [], liveInfoText, liveMain, liveFocus, liveList;
   var detailLeft, detailPlayer, detailButtons, detailBottom;
   var searchKeyboard, searchHot, searchResults, searchEmpty, searchHotGrid,
@@ -1057,6 +1064,8 @@ function portalServiceCall(method, params, done) {
       rail.classList.toggle('is-collapsed', !inRail);
       var railBg = document.querySelector('.home-sidebar-bg');
       if (railBg) { railBg.classList.toggle('is-on', !!inRail); }
+      var homeScreen = $('screen-home');
+      if (homeScreen) { homeScreen.classList.toggle('is-rail-open', !!inRail); }
     }
     if (!silent) { reveal(node); }
     schedulePosterMemoryPass();
@@ -1581,11 +1590,13 @@ function portalServiceCall(method, params, done) {
     if (rail) { rail.classList.add('is-expanded'); rail.classList.remove('is-collapsed'); }
     var railBg = document.querySelector('.home-sidebar-bg');
     if (railBg) { railBg.classList.add('is-on'); }
+    var homeScreen = $('screen-home');
+    if (homeScreen) { homeScreen.classList.add('is-rail-open'); }
   }
 
   /* =================================================================== HOME */
   var pageDefs = [buildLivePage, buildFeaturedPage, buildMoviesPage, buildSeriesPage,
-                  buildKidsPage, buildAnimePage, buildExplorePage];
+                  buildKidsPage, buildAnimePage, buildNovelsPage, buildExplorePage];
   var pagesBuilt = {};
 
   function ensurePageBuilt(idx) {
@@ -1634,6 +1645,12 @@ function portalServiceCall(method, params, done) {
       item._tab = i;
       item._activate = (function (idx) {
         return function () {
+          if (TABS[idx].action === 'history') {
+            historyViewTab = 'history';
+            openSettings();
+            showSettingsPanel(1, true);
+            return;
+          }
           selectTab(idx, false);
           if (idx === 0) {
             var row = liveRows.filter(function (r) { return r._channel === state.channel; })[0];
@@ -1667,6 +1684,12 @@ function portalServiceCall(method, params, done) {
             return true;
           }
           if (dir === 'right') {
+            if (TABS[idx].action === 'history') {
+              historyViewTab = 'history';
+              openSettings();
+              showSettingsPanel(1, true);
+              return true;
+            }
             selectTab(idx, false);
             if (idx === 0) {
               var row = liveRows.filter(function (r) { return r._channel === state.channel; })[0];
@@ -1739,10 +1762,9 @@ function portalServiceCall(method, params, done) {
 
   function selectTab(index, focusContent) {
     var def = TABS[index];
-    if (def.page < 0) {
-      openSettings();
-      return;
-    }
+    /* Action rows are opened with OK/Right. Merely moving through the rail
+       must not throw the user out of Home before they confirm the choice. */
+    if (!def || def.action) { return; }
     var prevPage = TABS[state.tab] ? TABS[state.tab].page : def.page;
     state.tab = index;
     for (var i = 0; i < tabEls.length; i++) {
@@ -1802,7 +1824,9 @@ function portalServiceCall(method, params, done) {
     }
     if (state.screen === 'search') {
       var results = closest(img, '.search-results');
-      return !!(results && results.classList.contains('is-active'));
+      var hot = closest(img, '.search-hot');
+      return !!((results && results.classList.contains('is-active')) ||
+                (hot && !hot.classList.contains('is-hidden')));
     }
     if (state.screen === 'detail') {
       /* Related titles live inside the active detail screen, not a home page. */
@@ -2626,6 +2650,63 @@ function portalServiceCall(method, params, done) {
     }
   }
 
+  function novelCatalogItems() {
+    var out = [];
+    for (var i = 0; i < VOD.length; i++) {
+      var item = VOD[i];
+      var text = norm([
+        item.category || '', item.kind || '', item.title || '', item.alias || '',
+        item.genres && item.genres.join ? item.genres.join(' ') : (item.genres || '')
+      ].join(' '));
+      if (text.indexOf('novela') !== -1 || text.indexOf('telenovela') !== -1) {
+        out.push(item);
+      }
+    }
+    return out;
+  }
+
+  function buildNovelsPage(page) {
+    var all = novelPortalItems || novelCatalogItems();
+    if (!all.length) {
+      var empty = el('div', 'catalog-empty', novelPortalLoading ?
+        'Cargando novelas del portal…' : 'No se encontraron novelas en el catálogo.');
+      abs(empty, 192, 170, 1500, 80);
+      page.appendChild(empty);
+    } else {
+      var items = all.slice(0, 6);
+      var real = !!(items[0] && items[0]._portal);
+      bentoPage(page, items, { titles: real, dots: real ? 3 : 2, shade: real });
+      if (all.length > 6) { appendCatalogGrid(page, all.slice(6), 860, 'Más novelas'); }
+    }
+    loadNovelsFromPortal();
+  }
+
+  function loadNovelsFromPortal() {
+    if (novelPortalItems || novelPortalLoading || vodApi.mode !== 'portal') { return; }
+    novelPortalLoading = true;
+    portalServiceCall('search', { value: 'novela' }, function (error, payload) {
+      novelPortalLoading = false;
+      if (!error && payload && payload.returnValue !== false && payload.items && payload.items.length) {
+        novelPortalItems = [];
+        for (var i = 0; i < payload.items.length; i++) {
+          var item = normalizeVod(payload.items[i], i + 1);
+          item._portal = true;
+          novelPortalItems.push(item);
+        }
+      } else {
+        /* Avoid sending the same request each time the viewer moves through
+           the rail. A later app launch will ask the portal again. */
+        novelPortalItems = novelCatalogItems();
+      }
+      var novelPage = pages[6];
+      if (novelPage && pagesBuilt[6]) {
+        clear(novelPage);
+        buildNovelsPage(novelPage);
+        schedulePosterMemoryPass();
+      }
+    });
+  }
+
   /* KIDS: hero 831x534 + 2x2 grid 413x222 on the right, a subtitle line and a
      horizontal poster row (7 columns, last one clipped by the screen edge). */
   function buildKidsPage(page) {
@@ -3155,11 +3236,7 @@ function portalServiceCall(method, params, done) {
     searchKeyboard.appendChild(feedback);
 
     /* --- hot search grid (observed "Búsqueda popular", 10 portrait cells) --- */
-    var hotItems = hotSearches();
-    if (!hotItems.length) { hotItems = vodFor('busqueda', 10, 0); }
-    for (var h = 0; h < hotItems.length; h++) {
-      searchHotGrid.appendChild(makeSearchCell(hotItems[h], h));
-    }
+    renderPopularSearch();
 
     searchResults.classList.remove('is-active');
     searchEmpty.classList.remove('is-active');
@@ -3178,7 +3255,26 @@ function portalServiceCall(method, params, done) {
   function openSearch() {
     if (!searchKeyboard) { buildSearch(); }
     showScreen('search');
+    if (!state.searchQuery) { renderPopularSearch(); }
     setFocus(searchInput);
+  }
+
+  function popularSearchItems() {
+    var featured = allVodFor('destacado');
+    var out = featured && featured.length ? featured.slice(0, 10) : [];
+    if (!out.length) { out = hotSearches(); }
+    if (!out.length) { out = VOD.slice(0, 10); }
+    return out;
+  }
+
+  function renderPopularSearch() {
+    if (!searchHotGrid || state.searchQuery) { return; }
+    clear(searchHotGrid);
+    var hotItems = popularSearchItems();
+    for (var h = 0; h < hotItems.length; h++) {
+      searchHotGrid.appendChild(makeSearchCell(hotItems[h], h));
+    }
+    schedulePosterMemoryPass();
   }
 
   function updateSearchInput() {
@@ -4094,6 +4190,7 @@ function portalServiceCall(method, params, done) {
   }
 
   function openHistoryRecord(record) {
+    if (!record) { return; }
     for (var i = 0; i < VOD.length; i++) {
       if (String(VOD[i].id) === String(record.id)) {
         pendingHistoryRecord = record;
@@ -4101,6 +4198,33 @@ function portalServiceCall(method, params, done) {
         return;
       }
     }
+    /* Catalog refreshes can group seasons or replace the visible root list.
+       Recover by grouped season id/title, and finally recreate a portal item
+       from the durable history record so its real id can still be resolved. */
+    var wantedTitle = norm(record.title || '');
+    for (var v = 0; v < VOD.length; v++) {
+      var candidate = VOD[v];
+      var seasons = candidate._catalogSeasons || [];
+      var seasonMatch = false;
+      for (var s = 0; s < seasons.length; s++) {
+        if (String(seasons[s].id) === String(record.id)) { seasonMatch = true; break; }
+      }
+      if (seasonMatch || (wantedTitle && norm(candidate.title || '') === wantedTitle)) {
+        pendingHistoryRecord = record;
+        openDetail(candidate);
+        return;
+      }
+    }
+    var recovered = normalizeVod({
+      id: record.id,
+      title: record.title,
+      poster: record.poster,
+      type: record.series ? 'teleplay' : 'movie',
+      portal: true
+    }, 0);
+    recovered._portal = true;
+    pendingHistoryRecord = record;
+    openDetail(recovered);
   }
   var activeSubtitleCues = [];
   /* mediaInfo payloads keyed by episode/movie content id. */
@@ -4206,6 +4330,9 @@ function portalServiceCall(method, params, done) {
      not leak into the next one, while a series keeps it across its episodes
      (same series id). */
   var smoothModeByTitle = {};
+  /* Stops an automatic Normal -> Fluido retry from looping if FFmpeg itself
+     cannot open a particular title. Cleared when the viewer opens a title. */
+  var autoSmoothFallbackKey = '';
 
   function smoothModeKey(item) {
     if (!item) { return ''; }
@@ -4229,6 +4356,7 @@ function portalServiceCall(method, params, done) {
 
   /* Called when a different title is opened, never when zapping episodes. */
   function resetMediaSelection() {
+    autoSmoothFallbackKey = '';
     vodCurrentAudioTrack = 0;
     vodAudioChosen = false;
     vodCurrentSubtitle = null;
@@ -5874,6 +6002,21 @@ function portalServiceCall(method, params, done) {
     lastPlayingUrl = '';
     lastProxyOrigin = '';
     if (!playerVideo) { return; }
+    /* Detach the old Starfish pipeline callbacks before clearing its source.
+       Otherwise an asynchronous error from the previous episode can invoke
+       the new episode's handler and briefly paint a misleading código 4. */
+    playerVideo.onerror = null;
+    playerVideo.onwaiting = null;
+    playerVideo.onstalled = null;
+    playerVideo.onloadeddata = null;
+    playerVideo.oncanplay = null;
+    playerVideo.onloadedmetadata = null;
+    playerVideo.ondurationchange = null;
+    playerVideo.onplaying = null;
+    playerVideo.onended = null;
+    playerVideo.ontimeupdate = null;
+    playerVideo.onpause = null;
+    playerVideo.onplay = null;
     try { playerVideo.pause(); } catch (e) { /* ignore */ }
     try { playerVideo.currentTime = 0; } catch (e) { /* ignore */ }
     playerVideo.removeAttribute('src');
@@ -5945,6 +6088,24 @@ function portalServiceCall(method, params, done) {
           }
         }, 0);
         return;
+      }
+      /* Some portal VOD files are rejected by a TV's direct TS pipeline even
+         though the same HEVC/AAC content plays when remuxed as fragmented MP4.
+         Retry once through the protected Modo Fluido route, never in a loop. */
+      if (code === 4 && state.playerMode === 'vod' && state.streamMode === 'normal' && state.playerItem) {
+        var failedItem = state.playerItem;
+        var failedKey = smoothModeKey(failedItem);
+        if (autoSmoothFallbackKey !== failedKey) {
+          autoSmoothFallbackKey = failedKey;
+          setSmoothMode(failedItem, true);
+          setPlayerStatus('Reintentando película en modo compatible…');
+          setTimeout(function () {
+            if (state.playerMode === 'vod' && state.playerItem === failedItem && state.streamMode === 'smooth') {
+              restartCurrentPlayback();
+            }
+          }, 0);
+          return;
+        }
       }
       state.streamError = 'No se pudo abrir el stream (código ' + (code || 'error') + ')';
       playerVideo.classList.remove('is-active');
@@ -6045,12 +6206,24 @@ function portalServiceCall(method, params, done) {
     }
 
     var srcNode = document.createElement('source');
-    srcNode.src = url;
-    srcNode.type = typeStr;
+    /* LG's HLS pipeline reads mediaOption from the source element.  Setting
+       video.src afterwards replaces that source and silently drops HLS mode
+       on recent webOS releases, resulting in MEDIA_ERR_SRC_NOT_SUPPORTED. */
+    srcNode.setAttribute('src', url);
+    srcNode.setAttribute('type', typeStr);
+    if (isHls) {
+      /* webOS 3+ expects readyState to be reset before a new <source> is
+         attached.  This is intentionally limited to HLS; VOD keeps its
+         proven direct-source path and Modo Fluido remains untouched. */
+      try { playerVideo.load(); } catch (eHlsReset) { /* ignore */ }
+    }
     playerVideo.appendChild(srcNode);
 
-    /* Direct src assignment so webOS Starfish demuxer pipeline recreates reliably */
-    try { playerVideo.src = url; } catch (eSrc) {}
+    /* Direct src assignment is needed for the legacy URI/MP4 path, but must
+       never override the HLS source and its mediaOption. */
+    if (!isHls) {
+      try { playerVideo.src = url; } catch (eSrc) {}
+    }
     try { playerVideo.currentTime = 0; } catch (eCt) {}
 
     playerVideo.classList.add('is-active');
@@ -6466,8 +6639,31 @@ function portalServiceCall(method, params, done) {
     }
   }
 
+  /* ---------------------------------------------------------------- display */
+  /* The reference UI is authored at 1920×1080. Older sets expose that exact
+     logical viewport, whereas some UHD webOS 22/25 sets expose 3840×2160.
+     Without this fit pass only the left half of the fixed canvas is painted
+     and the right half of the TV remains black. */
+  function fitDesignViewport() {
+    var app = $('app');
+    if (!app) { return; }
+    var vw = window.innerWidth || (document.documentElement && document.documentElement.clientWidth) || 1920;
+    var vh = window.innerHeight || (document.documentElement && document.documentElement.clientHeight) || 1080;
+    var scale = Math.min(vw / 1920, vh / 1080);
+    if (!isFinite(scale) || scale <= 0) { scale = 1; }
+    /* Keep a non-16:9 display letterboxed instead of stretching the design. */
+    var left = Math.max(0, Math.round((vw - (1920 * scale)) / 2));
+    var top = Math.max(0, Math.round((vh - (1080 * scale)) / 2));
+    app.style.left = left + 'px';
+    app.style.top = top + 'px';
+    app.style.webkitTransform = 'scale(' + scale + ')';
+    app.style.transform = 'scale(' + scale + ')';
+  }
+
   /* ------------------------------------------------------------------ boot */
   function boot() {
+    fitDesignViewport();
+    window.addEventListener('resize', fitDesignViewport, false);
     document.addEventListener('keydown', handleKey, false);
     document.addEventListener('keyup', function (e) {
       var code = e.keyCode || e.which;
