@@ -1062,6 +1062,11 @@ printf "\n"
 kill $PID 2>/dev/null
 
 if [ "$V" != "$EXPECT" ]; then
+  if grep -q '"downgrade"[[:space:]]*:[[:space:]]*true' "$LOG" 2>/dev/null; then
+    echo "   >> La TV rechazo el paquete como una version anterior."
+    echo "   >> Esto ocurre cuando webOS compara 1.5.12 como menor que 1.5.9."
+    echo "   >> Usa un paquete con version mayor (por ejemplo 1.6.0) o desinstala la version previa."
+  fi
   echo "   >> La TV no confirmo la instalacion (encontrada: ${V:-ninguna})"
   echo "   ---- respuesta del televisor ----"
   tail -n 12 "$LOG" 2>/dev/null | sed 's/^/      /'

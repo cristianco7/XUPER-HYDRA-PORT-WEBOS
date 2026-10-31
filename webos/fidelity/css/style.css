@@ -13,8 +13,10 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 html, body {
-  width: 1920px;
-  height: 1080px;
+  /* The design canvas remains 1920×1080 (#app). The outer document must use
+     the real viewport so UHD webOS sets do not clip its scaled right side. */
+  width: 100%;
+  height: 100%;
   overflow: hidden;
   background: #000000;
   color: #ffffff;
@@ -27,7 +29,14 @@ html, body {
 
 img { border: 0; display: block; }
 div, section, span { outline: none; }
-#app { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
+#app {
+  position: relative;
+  width: 1920px;
+  height: 1080px;
+  overflow: hidden;
+  -webkit-transform-origin: top left;
+  transform-origin: top left;
+}
 
 .screen {
   position: absolute;
@@ -126,6 +135,7 @@ div, section, span { outline: none; }
                                        the content holds focus */
   -webkit-transition: opacity .2s linear;
   transition: opacity .2s linear;
+  z-index: 30;
 }
 .home-sidebar-bg.is-on { opacity: 1; }
 
@@ -136,15 +146,16 @@ div, section, span { outline: none; }
 .home-tabs {
   position: absolute;
   left: 0; top: 0;
-  width: 354px; height: 900px;
-  padding-top: 238.5px;
+  width: 354px; height: 1080px;
+  padding-top: 172px;
   overflow: hidden;
+  z-index: 31;
 }
 
 /* item_tab_recyclerview.xml */
 .tab-item {
   position: relative;
-  height: 94px;
+  height: 88px;
   width: 331px;
 }
 .tab-item .tab-pill {
@@ -191,8 +202,10 @@ div, section, span { outline: none; }
   height: 60px;
   white-space: nowrap;
   overflow: visible;
+  z-index: 32;
 }
 .home-port-credit {
+  z-index: 32;
   position: absolute;
   left: 730px;
   top: 39px;
@@ -349,6 +362,24 @@ div, section, span { outline: none; }
   height: 720px;
   background: #000000;
   overflow: hidden;
+  z-index: 1;
+}
+
+/* Keep the native live-video surface completely outside the expanded rail.
+   Some webOS compositors paint hardware video above translucent DOM layers. */
+#screen-home.is-rail-open .live-main {
+  left: 354px;
+  width: 1118px;
+  height: 629px;
+}
+#screen-home.is-rail-open .live-main .live-preview-video,
+#screen-home.is-rail-open .live-main .live-frame { width: 1118px; height: 629px; }
+#screen-home.is-rail-open .live-main .live-info { width: 1118px; top: 509px; }
+
+.catalog-empty {
+  color: #c7c7c7;
+  font-size: 31px;
+  line-height: 80px;
 }
 
 .live-main .live-preview-video {

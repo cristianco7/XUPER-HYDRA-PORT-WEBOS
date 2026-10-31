@@ -127,7 +127,10 @@ function resolveStream(message, forceRelay) {
       payload.playbackMode === 'smooth' || payload.playbackMode === 'relay';
     /* When smooth mode (Modo Fluido) is requested by the user, always route via
        the on-device FFmpeg relay so the native player receives clean fragmented MP4. */
-    if (relay.available() && useSmoothMode) {
+    if (useSmoothMode && !relay.available()) {
+      return fail(message, new Error('Modo Fluido no disponible: ffmpeg no es ejecutable en esta TV'));
+    }
+    if (useSmoothMode) {
       var relayUrl = relay.register(stream, { hevc: isHevc, audio: Number(payload.audioTrack) || 0 });
       console.log('[xuper-service] routing stream via ffmpeg relay: ' + relayUrl);
       stream.proxyPath = relayUrl;
