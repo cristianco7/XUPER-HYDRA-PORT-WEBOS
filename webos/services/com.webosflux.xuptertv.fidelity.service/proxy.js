@@ -237,6 +237,42 @@ function sendVirtualHls(req, res, token, entry) {
   });
 }
 
+/* Modern webOS HLS players strictly resolve a playlist's relative segment,
+ * key and nested-playlist URLs against the loopback manifest URL.  Those
+ * child requests must keep the portal's authorization headers too.  Rewrite
+ * every URI to an opaque local route and proxy it with the parent token. */
+function base64Url(value) {
+  return new Buffer(String(value), 'utf8').toString('base64')
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function fromBase64Url(value) {
+  var raw = String(value).replace(/-/g, '+').replace(/_/g, '/');
+  while (raw.length % 4) { raw += '='; }
+  return new Buffer(raw, 'base64').toString('utf8');
+}
+
+function hlsChildUrl(token, manifestUrl, reference) {
+  if (!reference || reference.indexOf('data:') === 0) { return reference; }
+  return baseUrl() + '/hls/' + token + '/' + base64Url(urlmod.resolve(manifestUrl, reference));
+}
+
+function rewriteHlsManifest(body, token, manifestUrl) {
+  var lines = String(body || '').replace(/^\uFEFF/, '').split(/\r?\n/);
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i];
+    if (!line) { continue; }
+    if (line.charAt(0) !== '#') {
+      lines[i] = hlsChildUrl(token, manifestUrl, line);
+    } else if (line.indexOf('URI=') !== -1) {
+      lines[i] = line.replace(/URI=("|')([^"']+)\1/g, function (all, quote, reference) {
+        return 'URI=' + quote + hlsChildUrl(token, manifestUrl, reference) + quote;
+      });
+    }
+  }
+  return lines.join('\n');
+}
+
 function forward(req, res, entry, token) {
   /* When switching to a different movie or episode, immediately abort all previous video streams */
   if (activeToken !== token) {
@@ -303,8 +339,31 @@ function forward(req, res, entry, token) {
     if (up.headers['content-length']) { out['Content-Length'] = up.headers['content-length']; }
     if (up.headers['content-range']) { out['Content-Range'] = up.headers['content-range']; }
 
+    if (req.method === 'HEAD') {
+      res.writeHead(up.statusCode || 200, out);
+      res.end();
+      up.resume();
+      return;
+    }
+
+    if (isM3u8) {
+      var chunks = [];
+      up.on('data', function (chunk) { chunks.push(chunk); });
+      up.on('error', function () { cleanup(); });
+      up.on('end', function () {
+        var body = rewriteHlsManifest(Buffer.concat(chunks).toString('utf8'), token, entry.url);
+        delete out['Content-Length'];
+        delete out['Content-Range'];
+        out['Content-Length'] = Buffer.byteLength(body);
+        try {
+          res.writeHead(up.statusCode || 200, out);
+          res.end(body);
+        } catch (eManifest) { cleanup(); }
+      });
+      return;
+    }
+
     res.writeHead(up.statusCode || 200, out);
-    if (req.method === 'HEAD') { res.end(); up.resume(); return; }
 
     up.on('error', function () { cleanup(); });
     up.on('close', function () { cleanup(); });
@@ -372,6 +431,27 @@ function handler(req, res) {
       return;
     }
     sendSubtitle(req, res, subEntry);
+    return;
+  }
+  var hls = /^\/hls\/([a-f0-9]{24})\/([A-Za-z0-9_-]+)$/.exec((req.url || '').split('?')[0]);
+  if (hls) {
+    var hlsEntry = tokens[hls[1]];
+    if (!hlsEntry) {
+      res.writeHead(410, { 'Content-Type': 'text/plain', 'Access-Control-Allow-Origin': '*' });
+      res.end('expired');
+      return;
+    }
+    var childUrl = fromBase64Url(hls[2]);
+    if (!/^https?:\/\//i.test(childUrl)) {
+      res.writeHead(400, { 'Content-Type': 'text/plain', 'Access-Control-Allow-Origin': '*' });
+      res.end('invalid hls child');
+      return;
+    }
+    forward(req, res, {
+      url: childUrl,
+      headers: hlsEntry.headers,
+      duration: 0
+    }, hls[1]);
     return;
   }
   var m = /^\/media\/([a-f0-9]{24})(?:\/([^\?#]*))?(?:[?#].*)?$/.exec(req.url || '');

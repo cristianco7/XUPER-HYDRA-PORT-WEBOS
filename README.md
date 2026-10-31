@@ -124,8 +124,11 @@ Detalles que resuelve solo, porque son la causa habitual de que falle:
 - **Criptografía antigua**: webOS 4 lleva OpenSSH 6.1, que solo ofrece
   `ssh-rsa`/SHA-1 y OpenSSH 9 de Windows rechaza por defecto. El instalador
   reactiva esos algoritmos **solo para esa conexión**.
-- **Copia**: fuerza el protocolo `scp` antiguo (`-O`), porque el servidor de la
-  TV no tiene SFTP.
+- **Copia**: usa el subsistema **SFTP** del modo desarrollador (la TV no trae
+  `scp` ni `sftp-server` en el `PATH`); si fallara, reintenta con `scp -O`.
+- **Cuenta**: el nombre de usuario cambia según el firmware (`prisoner` en la
+  mayoría, `prisioner` en algunas TV). Se prueban los dos y se recuerda el que
+  funcione en `tools/instalar-config.json`.
 - **KEY SERVER**: si la TV lo tiene activado no acepta la clave como contraseña.
   En ese caso publica una clave privada cifrada en `http://IP:9991/webos_rsa`
   (lo mismo que hace `ares-novacom --getkey`). El instalador la descarga, la
@@ -152,7 +155,7 @@ Requisitos:
 ### 1. Emparejar el televisor
 
 ```bash
-ares-setup-device            # añade el TV por IP; usuario: prisioner
+ares-setup-device            # añade el TV por IP; usuario: prisoner
 ares-novacom --device tv --getkey   # instala la clave SSH
 ares-device-info --device tv
 ```

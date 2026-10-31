@@ -176,9 +176,13 @@ service.register('mediaInfo', function (message) {
 
 service.register('liveChannels', function (message) {
   var payload = message.payload || {};
-  magis.getLiveChannels(payload.columnId, function (err, channels) {
+  magis.getLiveChannels(payload.columnId, payload.pageNum, payload.pageSize, function (err, channels, hasMore) {
     if (err) { return fail(message, err); }
-    respond(message, null, { channels: channels || [] });
+    respond(message, null, {
+      channels: channels || [],
+      pageNum: Math.max(1, parseInt(payload.pageNum, 10) || 1),
+      hasMore: !!hasMore
+    });
   });
 });
 

@@ -475,6 +475,13 @@ div, section, span { outline: none; }
   height: 720px;                    /* 480dp */
   overflow: hidden;
 }
+.live-list-status {
+  padding: 42px 18px;
+  color: rgba(255,255,255,.78);
+  font-size: 24px;
+  line-height: 32px;
+  text-align: center;
+}
 .live-row {
   position: relative;
   display: -webkit-box;

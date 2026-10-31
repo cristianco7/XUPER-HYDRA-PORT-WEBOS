@@ -49,6 +49,12 @@ $script:KeyDir = ''
 $script:UseKey = $false
 $script:KeyIsRsa = $false
 $script:DiagLog = ''
+$script:KeyError = ''
+$script:LastTransferError = ''
+$script:RootMode = ($TvUser -eq 'root')
+# Si el usuario viene por parametro (o se elige "TV con root") no se prueban
+# otros nombres de cuenta: se usa ese y punto.
+$script:UserExplicit = -not [string]::IsNullOrWhiteSpace($TvUser)
 
 # ---------------------------------------------------------------- apariencia
 function Line { Write-Host ('  ' + ('-' * 68)) -ForegroundColor DarkGray }
@@ -253,11 +259,17 @@ function Select-TvFromScan($locals) {
 
 function Test-SshOption([string]$opt) {
     # OpenSSH antiguo no conoce algunas opciones: se comprueban antes de usarlas.
+    # Ojo: si la entrada esta redirigida, ssh escribe un aviso por stderr y con
+    # ErrorActionPreference=Stop eso se convertiria en error. Aqui no interesa.
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
     try {
-        & ssh -G -o $opt localhost > $null 2>&1
+        $null = & ssh -G -o $opt localhost 2>$null
         return ($LASTEXITCODE -eq 0)
     } catch {
         return $false
+    } finally {
+        $ErrorActionPreference = $prev
     }
 }
 
@@ -374,7 +386,24 @@ function Read-TvPassword {
     return (Read-Host '   Clave de la TV')
 }
 
-function Test-TvPassword([string]$pass) {
+function Get-UserCandidates {
+    # La cuenta del modo desarrollador depende del firmware: unas TV usan
+    # 'prisoner' (con o, la que usa la herramienta oficial de LG) y otras
+    # 'prisioner' (con i). En vez de adivinar, se prueban en orden y se
+    # recuerda la que funcione en instalar-config.json.
+    $lista = New-Object System.Collections.Generic.List[string]
+    if ($script:UserExplicit -and $TvUser) {
+        [void]$lista.Add([string]$TvUser)
+        return $lista.ToArray()
+    }
+    foreach ($u in @($TvUser, $(if ($cfg) { [string]$cfg.user }), 'prisoner', 'prisioner')) {
+        if ([string]::IsNullOrWhiteSpace($u)) { continue }
+        if (-not $lista.Contains([string]$u)) { [void]$lista.Add([string]$u) }
+    }
+    return $lista.ToArray()
+}
+
+function Test-TvPassword([string]$pass, [string]$user = $TvUser) {
     # Prueba la clave con un comando inofensivo antes de subir 21 MB.
     # La salida se captura para no ensuciar la pantalla con errores de ssh.
     $prev = $ErrorActionPreference
@@ -382,7 +411,7 @@ function Test-TvPassword([string]$pass) {
     try {
         $a = @('-p', "$Port") + $script:SshOpts + @(
             '-o', 'NumberOfPasswordPrompts=1',
-            ($TvUser + '@' + $TvHost), 'true'
+            ($user + '@' + $TvHost), 'true'
         )
         $out = $pass | & ssh @a 2>&1 | Out-String
         $script:LastAuthError = $out
@@ -415,7 +444,11 @@ function Get-TvKey([string]$ip, [string]$passphrase) {
     # Las TV con "KEY SERVER" activado no aceptan contrasena: publican una clave
     # privada cifrada en http://IP:9991/webos_rsa y la passphrase de Developer
     # Mode la descifra. Es exactamente lo que hace "ares-novacom --getkey".
-    if (-not (Test-Port $ip 9991 1500)) { return '' }
+    $script:KeyError = ''
+    if (-not (Test-Port $ip 9991 4000)) {
+        $script:KeyError = 'La TV no abre el puerto 9991 (KEY SERVER).'
+        return ''
+    }
     Remove-TvKey
     $dir = Join-Path $env:TEMP ('xuper-tvkey-' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
     $path = Join-Path $dir 'webos_rsa'
@@ -423,37 +456,60 @@ function Get-TvKey([string]$ip, [string]$passphrase) {
     $ErrorActionPreference = 'Continue'
     try {
         New-Item -ItemType Directory -Path $dir -Force | Out-Null
-        Invoke-WebRequest -Uri ('http://' + $ip + ':9991/webos_rsa') -OutFile $path -UseBasicParsing -TimeoutSec 10 | Out-Null
-        if (-not (Test-Path -LiteralPath $path)) { return '' }
+        # El servidor de la TV es lento y a veces corta: se reintenta la descarga.
+        $bajada = $false
+        for ($i = 1; $i -le 3; $i++) {
+            try {
+                Invoke-WebRequest -Uri ('http://' + $ip + ':9991/webos_rsa') -OutFile $path -UseBasicParsing -TimeoutSec 15 | Out-Null
+                if ((Test-Path -LiteralPath $path) -and ((Get-Item -LiteralPath $path).Length -gt 100)) { $bajada = $true; break }
+            } catch {
+                $script:KeyError = 'No se pudo descargar la llave de la TV: ' + $_.Exception.Message
+            }
+            if ($i -lt 3) { Start-Sleep -Seconds 2 }
+        }
+        if (-not $bajada) {
+            if (-not $script:KeyError) { $script:KeyError = 'La TV no entrego su llave de seguridad.' }
+            return ''
+        }
         $head = ((Get-Content -LiteralPath $path -TotalCount 2) -join ' ')
-        if ($head -notmatch 'PRIVATE KEY') { return '' }
+        if ($head -notmatch 'PRIVATE KEY') {
+            $script:KeyError = 'Lo que publica la TV no es una llave valida.'
+            return ''
+        }
         Set-KeyAcl $path
         $script:KeyDir = $dir
         if ($head -match 'ENCRYPTED') {
             # ssh-keygen descifra el PEM sin abrir ningun prompt (por eso no se
             # cuelga como pasaba al pasar la clave cifrada a ssh -i).
             & ssh-keygen -p -m PEM -P $passphrase -N '""' -f $path 2>&1 | Out-Null
-            if ($LASTEXITCODE -ne 0) { return '' }
+            if ($LASTEXITCODE -ne 0) {
+                $script:KeyError = 'La clave no abre la llave de la TV (passphrase incorrecta).'
+                return ''
+            }
         }
         $pub = (& ssh-keygen -y -f $path 2>&1 | Out-String)
-        if ($pub -notmatch '^ssh-(rsa|ed25519)') { return '' }
+        if ($pub -notmatch '^ssh-(rsa|ed25519)') {
+            $script:KeyError = 'La llave de la TV no se pudo leer despues de descifrarla.'
+            return ''
+        }
         $script:KeyIsRsa = ($pub -match '^ssh-rsa')
         return $path
     } catch {
+        $script:KeyError = 'Error preparando la llave de la TV: ' + $_.Exception.Message
         return ''
     } finally {
         $ErrorActionPreference = $prev
     }
 }
 
-function Test-KeyAuth([string]$keyPath) {
+function Test-KeyAuth([string]$keyPath, [string]$user = $TvUser) {
     # Comprueba que la TV acepta esa clave, sin pedir nada por consola.
     $prev = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try {
         $a = @('-i', $keyPath, '-o', 'IdentitiesOnly=yes', '-o', 'BatchMode=yes',
             '-o', 'NumberOfPasswordPrompts=0', '-p', "$Port") + (Get-KeyAlgOpts) + $script:SshOpts + @(
-            ($TvUser + '@' + $TvHost), 'true')
+            ($user + '@' + $TvHost), 'true')
         $out = & ssh @a 2>&1 | Out-String
         $script:LastAuthError = $out
         return ($LASTEXITCODE -eq 0)
@@ -473,7 +529,7 @@ function Get-KeyAlgOpts {
     return @()
 }
 
-function Get-KeyAuthDebug([string]$keyPath) {
+function Get-KeyAuthDebug([string]$keyPath, [string]$user = $TvUser) {
     # Si la llave se descifra pero la TV no la autoriza, esto dice por que.
     # Guarda la salida completa en un archivo para poder enviarla.
     $prev = $ErrorActionPreference
@@ -481,13 +537,13 @@ function Get-KeyAuthDebug([string]$keyPath) {
     try {
         $a = @('-vvv', '-i', $keyPath, '-o', 'IdentitiesOnly=yes', '-o', 'BatchMode=yes',
             '-o', 'NumberOfPasswordPrompts=0', '-p', "$Port") + (Get-KeyAlgOpts) + $script:SshOpts + @(
-            ($TvUser + '@' + $TvHost), 'true')
+            ($user + '@' + $TvHost), 'true')
         $out = & ssh @a 2>&1 | Out-String
         $logPath = Join-Path $env:TEMP 'diagnostico-xupertv.txt'
         try {
             $sshVer = ([regex]::Match(((& ssh -V 2>&1) | Out-String), 'OpenSSH[_A-Za-z0-9.]+')).Value
             $head = 'XuperTV - diagnostico de la llave de seguridad' + "`r`n" +
-                ('TV      : ' + $TvUser + '@' + $TvHost + ':' + $Port) + "`r`n" +
+                ('TV      : ' + $user + '@' + $TvHost + ':' + $Port) + "`r`n" +
                 ('Fecha   : ' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')) + "`r`n" +
                 ('Huella  : ' + (((& ssh-keygen -lf $keyPath 2>&1) | Out-String).Trim())) + "`r`n" +
                 ('Version : ' + $sshVer) + "`r`n`r`n"
@@ -514,6 +570,39 @@ function Get-AuthArgs {
             '-o', 'BatchMode=yes', '-o', 'NumberOfPasswordPrompts=0') + (Get-KeyAlgOpts)
     }
     return @()
+}
+
+function Send-FileToTv([string]$localPath, [string]$remotePath, [string]$pass) {
+    # Las TV webOS no traen "scp" ni "sftp-server" en el PATH: el scp antiguo
+    # (-O) falla con "sh: scp: not found". Lo que si existe es el subsistema
+    # sftp del sshd del modo desarrollador, asi que se usa sftp.
+    $script:LastTransferError = ''
+    $batch = Join-Path $env:TEMP ('xuper-sftp-' + [Guid]::NewGuid().ToString('N').Substring(0, 6) + '.txt')
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $lines = @(('put "' + $localPath + '" "' + $remotePath + '"'), 'quit')
+        [System.IO.File]::WriteAllLines($batch, $lines, (New-Object System.Text.UTF8Encoding($false)))
+        $target = $TvUser + '@' + $TvHost
+        $a = @('-P', "$Port") + $script:SshOpts + (Get-AuthArgs) + @('-b', $batch, $target)
+        $out = & sftp @a 2>&1 | Out-String
+        if ($LASTEXITCODE -eq 0) { return $true }
+        $script:LastTransferError = $out
+
+        # Plan B: scp en modo antiguo (por si esa TV si trae scp).
+        $scpArgs = @('-P', "$Port")
+        if ($script:ScpLegacy) { $scpArgs = @('-O') + $scpArgs }
+        $scpArgs = $scpArgs + $script:SshOpts + (Get-AuthArgs) + @($localPath, ($target + ':' + $remotePath))
+        if ($pass -and -not $script:UseKey) { $pass | & scp @scpArgs 2>&1 | Out-Null } else { & scp @scpArgs 2>&1 | Out-Null }
+        if ($LASTEXITCODE -eq 0) { return $true }
+        return $false
+    } catch {
+        $script:LastTransferError = '' + $_.Exception.Message
+        return $false
+    } finally {
+        Remove-Item -LiteralPath $batch -Force -ErrorAction SilentlyContinue
+        $ErrorActionPreference = $prev
+    }
 }
 
 function Get-SshDiagnosis {
@@ -663,7 +752,13 @@ if (-not $TvHost) {
 if (-not $TvUser) {
     Info 'Tipo de TV:  1) Modo Desarrollador (lo normal)   2) TV con root'
     $choice = Read-WithDefault 'Elige 1 o 2' '1'
-    if ($choice -eq '2') { $TvUser = 'root' } else { $TvUser = 'prisioner' }
+    if ($choice -eq '2') {
+        $TvUser = 'root'
+        $script:UserExplicit = $true
+        $script:RootMode = $true
+    }
+    # En Modo Desarrollador el nombre de la cuenta cambia segun el firmware
+    # ('prisoner' o 'prisioner'): se deja vacio y se prueban los dos al entrar.
 }
 
 # Si la TV esta en otra red que el PC, no se van a ver nunca: avisar claro.
@@ -680,14 +775,24 @@ if ((Test-IPv4 $TvHost) -and $locals.Count -gt 0) {
 # ---------------------------------------------------------- 4. conexion
 Step '4/6' 'Comprobando la conexion'
 
-# Puerto: las TV LG usan el 9922 para el SSH del modo desarrollador; algunas
-# tambien abren el 22. Se prueban los dos en vez de dar por hecho el 22.
+# Puerto: Developer Mode usa 9922; Homebrew/root expone SSH en 22.  Se da
+# prioridad al puerto propio del modo elegido para no autenticar root contra
+# el servidor temporal de Developer Mode.
 if ($Port -le 0) {
     $candidatos = @()
-    if ($detectedPort -gt 0) { $candidatos += $detectedPort }
-    if ($cfg -and $cfg.port) { $candidatos += [int]$cfg.port }
-    $candidatos += 9922
-    $candidatos += 22
+    if ($script:RootMode) {
+        $candidatos += 22
+        if ($detectedPort -gt 0) { $candidatos += $detectedPort }
+        if ($cfg -and $cfg.port) { $candidatos += [int]$cfg.port }
+        $candidatos += 9922
+    } else {
+        # Developer Mode siempre es prisoner@9922. No permitimos que un
+        # puerto 22 guardado de una instalacion anterior gane esta prioridad.
+        $candidatos += 9922
+        if ($detectedPort -gt 0) { $candidatos += $detectedPort }
+        if ($cfg -and $cfg.port) { $candidatos += [int]$cfg.port }
+        $candidatos += 22
+    }
     $candidatos = @($candidatos | Where-Object { $_ -gt 0 } | Select-Object -Unique)
     if ($DryRun) {
         $Port = $candidatos[0]
@@ -750,7 +855,9 @@ if ($DryRun) {
     }
 }
 
-Ok ('TV: ' + $TvHost + ':' + $Port + '  usuario: ' + $TvUser)
+$userLabel = $TvUser
+if (-not $userLabel) { $userLabel = 'se detecta al conectar' }
+Ok ('TV: ' + $TvHost + ':' + $Port + '  usuario: ' + $userLabel)
 
 $script:SshOpts = @(Get-SshOpts)
 $script:ScpLegacy = Test-ScpLegacy
@@ -772,7 +879,12 @@ if ($DryRun) {
 
 # ---------------------------------------------------------- 5. copiar
 Step '5/6' 'Copiando la aplicacion al televisor'
-Info 'Escribe la clave que muestra la app "Developer Mode" en la TV.'
+if ($script:RootMode) {
+    Info 'Escribe la contraseña SSH de Homebrew Channel.'
+    Info 'Si nunca la cambiaste, normalmente es: alpine'
+} else {
+    Info 'Escribe la clave que muestra la app "Developer Mode" en la TV.'
+}
 Info 'No se ve nada mientras escribes: es normal.'
 Write-Host ''
 
@@ -782,78 +894,109 @@ while (-not $tvPass) {
     $intentosPass = $intentosPass + 1
     if ($intentosPass -gt 3) {
         Fail 'La TV no acepta ninguna de las claves escritas.'
-        Info 'Abre la app "Developer Mode" en la TV y mira la clave de ahora.'
-        Info 'Si pone KEY SERVER en ON, esa misma clave desbloquea la llave de la TV.'
-        Info 'Si la sesion esta caducada, renovadla (dura 50 horas) y repite.'
+        if ($script:RootMode) {
+            Info 'Comprueba que SSH Server este activado en Homebrew Channel.'
+            Info 'Usa la contraseña SSH configurada alli (por defecto: alpine).'
+        } else {
+            Info 'Abre la app "Developer Mode" en la TV y mira la clave de ahora.'
+            Info 'Si pone KEY SERVER en ON, esa misma clave desbloquea la llave de la TV.'
+            Info 'Si la sesion esta caducada, renovadla (dura 50 horas) y repite.'
+        }
         Pause-End
         exit 1
     }
     $tvPass = Read-TvPassword
+    if ($tvPass) { $tvPass = $tvPass.Trim() }
     if ([string]::IsNullOrEmpty($tvPass)) {
         Fail 'La clave no puede estar vacia.'
         $tvPass = ''
         continue
     }
     Info 'Comprobando la clave con la TV...'
-    if (Test-TvPassword $tvPass) {
-        $script:UseKey = $false
-        Ok 'La TV acepta la clave'
-        break
-    }
-    # Con "KEY SERVER" activado la TV no admite contrasena: la passphrase sirve
-    # para descifrar la clave de seguridad que la TV publica en el puerto 9991.
-    Info 'No la acepta como contrasena. Probando la llave de seguridad...'
-    $keyPath = Get-TvKey $TvHost $tvPass
-    if ($keyPath) {
-        # La TV a veces corta una conexion suelta: se reintenta antes de darla
-        # por buena o por mala.
-        $authOk = $false
-        for ($try = 1; $try -le 3; $try++) {
-            if (Test-KeyAuth $keyPath) { $authOk = $true; break }
-            if ($try -lt 3) { Start-Sleep -Seconds 1 }
-        }
-        if ($authOk) {
-            $script:KeyPath = $keyPath
-            $script:UseKey = $true
-            Ok 'La TV acepta la llave de seguridad (KEY SERVER)'
+    $usuarios = @(Get-UserCandidates)
+    $authOk = $false
+
+    foreach ($u in $usuarios) {
+        if (Test-TvPassword $tvPass $u) {
+            $TvUser = $u
+            $script:UseKey = $false
+            $authOk = $true
+            Ok ('La TV acepta la clave (usuario ' + $u + ')')
             break
         }
-        # Si la llave se descifro, la passphrase es correcta: pedirla otra vez no
-        # arregla nada. El problema esta en la sesion de Developer Mode.
-        Fail 'La clave es correcta (ha descifrado la llave), pero la TV no la autoriza.'
-        Info 'Eso NO es un fallo de la clave: es la sesion de Developer Mode de la TV.'
-        Info 'En la TV: abre "Developer Mode", desactiva y vuelve a activar el modo,'
-        Info 'espera el reinicio y apunta la IP nueva (puede cambiar). Repite entonces.'
-        $dbg = Get-KeyAuthDebug $keyPath
-        if ($dbg) {
-            Info 'Detalle tecnico:'
-            Write-Host $dbg -ForegroundColor DarkGray
-        }
-        if ($script:DiagLog) {
-            Info ('Diagnostico guardado en: ' + $script:DiagLog)
-            Info 'Envia ese archivo si necesitas ayuda.'
-        }
-        Pause-End
-        exit 1
     }
-    Fail 'La TV ha rechazado esa clave.'
-    Info 'Escribela otra vez con cuidado: no se ve al escribir.'
-    if ($intentosPass -ge 2) {
-        Info 'Tiene que ser la que muestra la app Developer Mode, tal cual.'
+
+    if (-not $authOk -and -not $script:RootMode) {
+        # Con "KEY SERVER" activado la TV no admite contrasena: la passphrase
+        # sirve para descifrar la llave que la TV publica en el puerto 9991.
+        # Tras un reinicio la web del Key Server puede entregar una llave
+        # anterior durante unos segundos. Se baja una llave NUEVA en cada
+        # intento; reintentar el mismo archivo no arregla esa desincronizacion.
+        Info 'No la acepta como contrasena. Probando la llave de seguridad...'
+        $keyPath = ''
+        for ($keyRound = 1; $keyRound -le 3 -and -not $authOk; $keyRound++) {
+            if ($keyRound -gt 1) {
+                Info ('La TV aun sincroniza su llave. Solicito una nueva (' + $keyRound + '/3)...')
+                Start-Sleep -Seconds 4
+            }
+            $keyPath = Get-TvKey $TvHost $tvPass
+            if ($keyPath) {
+                foreach ($u in $usuarios) {
+                    if (Test-KeyAuth $keyPath $u) { $authOk = $true; break }
+                }
+                if ($authOk) {
+                    $TvUser = $u
+                    $script:KeyPath = $keyPath
+                    $script:UseKey = $true
+                    Ok ('La TV acepta la llave de seguridad (KEY SERVER, usuario ' + $u + ')')
+                    break
+                }
+            }
+        }
+        if (-not $authOk -and $keyPath) {
+            # Si la llave se descifro, la passphrase es correcta: pedirla otra
+            # vez no arregla nada. El problema esta en la sesion de la TV.
+            Fail 'La clave es correcta, pero la TV rechazo tres llaves nuevas.'
+            Info ('Cuentas probadas: ' + ($usuarios -join ', '))
+            if ($script:LastAuthError) {
+                $primera = (($script:LastAuthError -split "`r?`n") | Where-Object { $_ -match 'denied|refused|reset|closed|Too many' } | Select-Object -First 1)
+                if ($primera) { Info ('La TV respondio: ' + $primera.Trim()) }
+            }
+            $dbg = Get-KeyAuthDebug $keyPath $usuarios[-1]
+            if ($dbg) {
+                Info 'Detalle tecnico:'
+                Write-Host $dbg -ForegroundColor DarkGray
+            }
+            if ($script:DiagLog) {
+                Info ('Diagnostico guardado en: ' + $script:DiagLog)
+                Info 'Envia ese archivo si necesitas ayuda.'
+            }
+            Pause-End
+            exit 1
+        }
+        elseif ($script:KeyError) {
+            Warn ('No se pudo usar la llave de la TV: ' + $script:KeyError)
+        }
     }
-    $tvPass = ''
+
+    if (-not $authOk) {
+        Fail 'La TV ha rechazado esa clave.'
+        if ($script:RootMode) {
+            Info 'Comprueba SSH Server en Homebrew Channel y la contraseña root.'
+        } else {
+            Info 'Escribela otra vez con cuidado: no se ve al escribir.'
+        }
+        if (-not $script:RootMode -and $intentosPass -ge 2) {
+            Info 'Tiene que ser la que muestra la app Developer Mode, tal cual.'
+        }
+        $tvPass = ''
+    }
 }
 Write-Host ''
 
 $authArgs = @(Get-AuthArgs)
-$stdinPass = $null
-if (-not $script:UseKey) { $stdinPass = $tvPass }
 
-$scpArgs = @('-P', "$Port")
-if ($script:ScpLegacy) { $scpArgs = @('-O') + $scpArgs }
-$scpArgs = $scpArgs + $script:SshOpts + $authArgs + @($ipkPath, ($TvUser + '@' + $TvHost + ':' + $remoteIpk))
-Invoke-Native 'scp' $scpArgs $stdinPass
-if ($script:LastExit -ne 0) {
+if (-not (Send-FileToTv $ipkPath $remoteIpk $tvPass)) {
     $diag = Get-SshDiagnosis
     if ($diag -match 'timed out|No route to host|Connection refused|Network is unreachable|Could not resolve') {
         Explain-SshError $diag
@@ -863,11 +1006,12 @@ if ($script:LastExit -ne 0) {
     Warn 'No pude escribir en /media/developer/temp. Pruebo en /tmp...'
     $remoteDir = '/tmp'
     $remoteIpk = "$remoteDir/" + $ipkItem.Name
-    $scpArgs = @('-P', "$Port")
-    if ($script:ScpLegacy) { $scpArgs = @('-O') + $scpArgs }
-    $scpArgs = $scpArgs + $script:SshOpts + $authArgs + @($ipkPath, ($TvUser + '@' + $TvHost + ':' + $remoteIpk))
-    Invoke-Native 'scp' $scpArgs $stdinPass
-    if ($script:LastExit -ne 0) {
+    if (-not (Send-FileToTv $ipkPath $remoteIpk $tvPass)) {
+        Fail 'No pude copiar la aplicacion al televisor.'
+        if ($script:LastTransferError) {
+            $linea = (($script:LastTransferError -split "`r?`n") | Where-Object { $_.Trim() } | Select-Object -Last 2) -join ' '
+            if ($linea) { Info ('La TV respondio: ' + $linea.Trim()) }
+        }
         Explain-SshError (Get-SshDiagnosis)
         Pause-End
         exit 1
@@ -894,7 +1038,11 @@ APP="@@APPDIR@@"
 SVC="@@SVCDIR@@"
 EXPECT="@@VERSION@@"
 JSON="@@JSON@@"
-LOG="/tmp/xuper-install.log"
+# En Developer Mode el usuario prisoner puede ejecutar la instalacion, pero
+# algunas TVs montan /tmp como solo lectura para ese usuario. El JSON vive en
+# /media/developer/temp, que es la carpeta que acabamos de escribir por SFTP;
+# deja el log junto a ese archivo en vez de abortar antes de instalar.
+LOG="${JSON}.log"
 
 echo ""
 echo "   >> La TV esta instalando el paquete..."
@@ -952,14 +1100,12 @@ $utf8 = New-Object System.Text.UTF8Encoding($false)
 [System.IO.File]::WriteAllText($localJson, $installJson, $utf8)
 [System.IO.File]::WriteAllText($localLaunch, $launchJson, $utf8)
 
-$scpArgs = @('-P', "$Port")
-if ($script:ScpLegacy) { $scpArgs = @('-O') + $scpArgs }
-$scpArgs = $scpArgs + $script:SshOpts + $authArgs + @(
-    $localSh, $localJson, $localLaunch,
-    ($TvUser + '@' + $TvHost + ':' + $remoteDir + '/')
-)
-Invoke-Native 'scp' $scpArgs $stdinPass
-if ($script:LastExit -ne 0) {
+$filesOk = $true
+foreach ($f in @($localSh, $localJson, $localLaunch)) {
+    $leaf = Split-Path -Leaf $f
+    if (-not (Send-FileToTv $f ($remoteDir + '/' + $leaf) $tvPass)) { $filesOk = $false; break }
+}
+if (-not $filesOk) {
     Explain-SshError (Get-SshDiagnosis)
     Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
     Pause-End
@@ -967,7 +1113,7 @@ if ($script:LastExit -ne 0) {
 }
 
 $sshArgs = @('-p', "$Port") + $script:SshOpts + $authArgs + @(($TvUser + '@' + $TvHost), ('sh ' + $remoteShPath))
-Invoke-Native 'ssh' $sshArgs $stdinPass
+if ($script:UseKey) { Invoke-Native 'ssh' $sshArgs } else { Invoke-Native 'ssh' $sshArgs $tvPass }
 $installExit = $script:LastExit
 
 Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
