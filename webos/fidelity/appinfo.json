@@ -7,7 +7,7 @@
   "title": "XuperTV",
   "icon": "images/icon.png",
   "largeIcon": "images/icon-large.png",
-  "resolution": "1920x1080",
+  "resolution": "1280x720",
   "bgColor": "#000000",
   "bgImage": "",
   "spinnerOnLaunch": false,
