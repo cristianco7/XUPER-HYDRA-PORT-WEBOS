@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="css/ui-refresh.css">
 <link rel="stylesheet" href="css/clean.css">
+<link rel="stylesheet" href="css/tv-fixes.css">
 <!-- webOS 1.0-3.5 polyfills for legacy WebKit / Chromium -->
 <script>
 if (typeof Symbol === 'undefined') {
@@ -401,5 +402,7 @@ if (!Array.prototype.findIndex) {
 <!-- Local, authorized VOD endpoint configuration.  Keep this file before app.js. -->
 <script src="config/api.js"></script>
 <script src="js/app.js"></script>
+<!-- On-TV display/navigation fixes: Back keyup guard and Inicio buttons. -->
+<script src="js/tv-fixes.js"></script>
 </body>
 </html>
