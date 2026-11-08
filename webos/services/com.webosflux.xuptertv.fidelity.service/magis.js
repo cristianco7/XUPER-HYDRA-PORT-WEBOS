@@ -910,12 +910,49 @@ function itemFromAsset(e, r, t) {
     portal: !0,
   };
 }
+var MAX_TREE_CACHE = 12,
+  MAX_SEARCH_CACHE = 16,
+  MAX_ITEM_CACHE = 300,
+  MAX_PLAY_CACHE = 12,
+  MAX_LIVE_CHANNEL_CACHE = 600,
+  MAX_M3U_CACHE = 3,
+  MAX_LIVE_RESOLVE_CACHE = 40;
+/* Purga caches acotados: elimina entradas vencidas y, si aun superan el
+   limite, las mas antiguas. Evita que el servicio retenga catalogos,
+   busquedas y listas M3U completas hasta agotar la RAM en TVs de 1 GB. */
+function pruneCache(e, r, t) {
+  if (!e) return;
+  var n = Object.keys(e),
+    s = Date.now(),
+    a,
+    o,
+    i;
+  if (t)
+    for (a = n.length - 1; a >= 0; a--)
+      ((o = n[a]),
+        (i = e[o]),
+        i && i.at && s - i.at > t && (delete e[o], n.splice(a, 1)));
+  if (!r || n.length <= r) return;
+  n.sort(function (r, t) {
+    return ((e[r] && e[r].at) || 0) - ((e[t] && e[t].at) || 0);
+  });
+  for (a = 0; a < n.length - r; a++) delete e[n[a]];
+}
 var treeCache = {},
   itemCache = {},
+  itemCacheOrder = [],
   searchCache = {},
   slbCache = null;
 function remember(e) {
-  e && e.id && (itemCache[e.id] = e);
+  if (!e || !e.id) return;
+  if (!itemCache[e.id]) {
+    itemCacheOrder.push(e.id);
+    if (itemCacheOrder.length > MAX_ITEM_CACHE) {
+      var r = itemCacheOrder.shift();
+      r !== e.id && delete itemCache[r];
+    }
+  }
+  itemCache[e.id] = e;
 }
 function itemsFromTree(e, r) {
   var t = e && e.recommendList,
@@ -958,6 +995,7 @@ function home(e, r, t) {
         var o = itemsFromTree(a, e);
         enrichCatalog(e, o, function (enriched) {
           ((treeCache[n] = { at: Date.now(), items: enriched }),
+            pruneCache(treeCache, MAX_TREE_CACHE, TREE_TTL),
             t(null, { root: e, pageNum: r, items: enriched, cached: !1 }));
         });
       }
@@ -1095,6 +1133,7 @@ function search(e, r, t) {
               }
           }
         ((searchCache[cacheKey] = { at: Date.now(), items: a }),
+          pruneCache(searchCache, MAX_SEARCH_CACHE, SEARCH_TTL),
           t(null, { items: a, total: rResp && rResp.totalSize, cached: !1 }));
       }
     );
@@ -1494,7 +1533,9 @@ function loadPlay(e, r, t) {
             if (!n.length)
               return a(new Error("el portal no devolvió pistas de vídeo"));
             var o = { play: r, episode: t, tracks: n };
-            ((playCache[s] = { at: Date.now(), data: o }), a(null, o));
+            ((playCache[s] = { at: Date.now(), data: o }),
+              pruneCache(playCache, MAX_PLAY_CACHE, PLAY_TTL),
+              a(null, o));
           }
         );
       }));
@@ -1747,7 +1788,8 @@ function getLiveChannels(e, r, t, n) {
                 }));
             }
           }
-          n(null, a, s.length >= t);
+          (pruneCache(liveChannelCache, MAX_LIVE_CHANNEL_CACHE),
+            n(null, a, s.length >= t));
         }
       );
     }));
@@ -1854,6 +1896,7 @@ function fetchM3u(e, r) {
           t.on("end", function () {
             var parsed = parseM3u(Buffer.concat(n).toString("utf8"));
             m3uCache[e] = { at: Date.now(), data: parsed };
+            pruneCache(m3uCache, MAX_M3U_CACHE, M3U_CACHE_TTL);
             r(null, parsed);
           }));
       });
@@ -2009,7 +2052,13 @@ function resolveLive(e, r) {
                   e
               ),
             };
-            ((liveResolveCache[e] = { at: Date.now(), stream: v }), r(null, v));
+            ((liveResolveCache[e] = { at: Date.now(), stream: v }),
+              pruneCache(
+                liveResolveCache,
+                MAX_LIVE_RESOLVE_CACHE,
+                LIVE_RESOLVE_CACHE_MS
+              ),
+              r(null, v));
           })(l);
         });
       })();
