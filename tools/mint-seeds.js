@@ -203,10 +203,14 @@ function next() {
   });
 }
 
+var SOFT_FAIL = process.argv.indexOf("--soft-fail") !== -1;
+
 function done(aborted) {
   if (!fresh.length) {
     log(aborted ? "ABORTADO: esta IP está bloqueada por el portal; no se acuñó ninguna semilla." : "sin semillas nuevas; el pool queda como estaba.");
-    process.exitCode = aborted ? 2 : 1;
+    /* Si se pasa --soft-fail (usado en CI / GitHub Actions), un bloqueo de IP
+       no rompe el pipeline: se conserva el pool anterior intacto y se sale con 0. */
+    process.exitCode = SOFT_FAIL ? 0 : (aborted ? 2 : 1);
     return;
   }
   var seeds = merge(readPool(), fresh);

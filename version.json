@@ -1,9 +1,9 @@
 {
-  "version": "3.0.0",
+  "version": "3.0.1",
   "name": "XuperTV",
   "minWebos": "1.0.0",
-  "ipkUrl": "https://github.com/cristianco7/XUPER-HYDRA-PORT-WEBOS/releases/download/v3.0.0/com.webosflux.xuptertv.fidelity_3.0.0_all.ipk",
-  "sha256": "BA22721937BAE2743D605A595DD621DE18ECF20BFBAB075581C93089F008AA7A",
-  "changelog": "Versión 3.0.0: mantiene las correcciones de red y TV en vivo de 2.2.98. El foco del carrusel ahora desplaza cada tarjeta completa a la vista, incluido Ver más. Las filas de proveedor consultan páginas adicionales y las secciones se muestran paginadas sin recortar la última fila.",
+  "ipkUrl": "https://github.com/cristianco7/XUPER-HYDRA-PORT-WEBOS/releases/download/v3.0.1/com.webosflux.xuptertv.fidelity_3.0.1_all.ipk",
+  "sha256": "AE98F563E8A1F8D3804668D09466BBD343FF36F5116CFA82ABCF1F8390B9CB76",
+  "changelog": "Versión 3.0.1: TV en vivo vuelve al comportamiento clásico de 2.2.45. Ya no reinicia ni re-resuelve automáticamente una señal HLS por un intervalo de buffering; se mantienen el proxy local, DNS seguro DoH y los reintentos de red del servicio.",
   "releaseDate": "2026-11-09"
 }

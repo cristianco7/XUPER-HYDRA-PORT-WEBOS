@@ -42,8 +42,19 @@ jobs:
           ref: seeds
           path: pool
 
+      - name: Conectar Cloudflare WARP (evita bloqueo de IP datacenter de Azure)
+        uses: fscarmen/warp-on-actions@v1.4
+        with:
+          mode: wireguard
+          stack: dual
+        continue-on-error: true
+
+      - name: Verificar IP de salida
+        run: |
+          curl -s https://cloudflare.com/cdn-cgi/trace || true
+
       - name: Acunar semillas
-        run: node tools/mint-seeds.js --count "${{ inputs.count || '30' }}" --pool pool/seeds.json --out pool/seeds.json
+        run: node tools/mint-seeds.js --count "${{ inputs.count || '30' }}" --pool pool/seeds.json --out pool/seeds.json --soft-fail
 
       - name: Publicar pool
         working-directory: pool
