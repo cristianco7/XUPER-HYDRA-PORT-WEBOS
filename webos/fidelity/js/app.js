@@ -1,6 +1,6 @@
 !(function () {
   "use strict";
-  var APP_VERSION = "3.0.0";
+  var APP_VERSION = "3.0.1";
   function e(e, t, a) {
     var i = document.createElement(e);
     return (t && (i.className = t), null != a && (i.textContent = a), i);
@@ -9134,38 +9134,6 @@
       ((xe.onerror = function () {
         (Gn(), Nr(), logLive("err"));
         var t = xe.error && xe.error.code;
-        if (4 === t && "live" === X.playerMode && o && !a) {
-          var i = Zr;
-          return (
-            jr("Reintentando señal con compatibilidad webOS…"),
-            void setTimeout(function () {
-              "live" === X.playerMode && Zr === i && Gr(e, { nativeHls: !0 });
-            }, 0)
-          );
-        }
-        /* Un canal de TV en vivo puede fallar por un microcorte del CDN. Antes
-           eso mostraba "No se pudo abrir el stream" de inmediato. Ahora se
-           reintenta sin molestar al espectador: primero la misma URL, luego
-           una re-resolución de la señal. */
-        if (
-          "live" === X.playerMode &&
-          (2 === t || 3 === t || 4 === t) &&
-          liveErrRetries < 2
-        ) {
-          liveErrRetries += 1;
-          var retryToken = Zr;
-          jr("Reconectando señal…");
-          return void setTimeout(function () {
-            if ("live" !== X.playerMode || Zr !== retryToken || !xe) return;
-            if (liveErrRetries < 2)
-              try {
-                xe.load();
-                var retryPlay = xe.play();
-                retryPlay && retryPlay.catch && retryPlay.catch(function () {});
-              } catch (err) {}
-            else to(F[X.channel], !0, !0);
-          }, 1200 * liveErrRetries);
-        }
         if (
           4 === t &&
           "vod" === X.playerMode &&
@@ -9274,9 +9242,7 @@
         }),
         (xe.onplaying = function () {
           (clearLiveStallWatch(),
-            "live" === X.playerMode && watchLiveStall(15000),
             "live" === X.playerMode && logLive("play"),
-            (liveErrRetries = 0),
             "live" === X.playerMode &&
               (liveStallLastTime = Number(xe.currentTime) || 0),
             Lr(),
@@ -9636,7 +9602,6 @@
     liveStallTimer = null,
     liveStallChannel = -1,
     liveStallRetries = 0,
-    liveErrRetries = 0,
     liveStallLastTime = -1,
     liveStallStableSince = 0,
     liveLogBuf = [],
@@ -9670,63 +9635,13 @@
   function clearLiveStallWatch() {
     liveStallTimer && (clearTimeout(liveStallTimer), (liveStallTimer = null));
   }
-  /* Vigilante de TV en vivo: SOLO rescata un cuelgue real.
-     - No reacciona a "waiting"/"stalled": en HLS en vivo esos avisos son
-       normales entre segmentos y reaccionar ahí producía justo el tirón de
-       "Cargando vídeo" seguido de un salto de imagen.
-     - No mueve currentTime ni recarga el elemento. Cualquier salto (más aún
-       hacia atrás) obliga al televisor a volver a descargar y decodificar, y
-       las marcas de tiempo de estas señales no son fiables: se saltaba a otro
-       punto de la emisión.
-     - Comprueba cada 15 s si la posición avanzó. Si no avanzó, primero solo
-       reanuda (barato); si sigue parado, reconecta la señal completa. */
+  /* TV en vivo clásica (2.2.45): no reinicia el pipeline por un intervalo sin
+     avance. HLS puede mantener el mismo currentTime mientras cambia de
+     segmento; en varios LG, llamar play/load o resolver el canal de nuevo en
+     ese punto producía un salto o congelamiento visible. Los errores reales se
+     muestran al espectador para que pueda reintentar manualmente con OK. */
   function watchLiveStall(delay, mark) {
-    if (
-      liveStallTimer ||
-      "live" !== X.playerMode ||
-      "player" !== X.screen ||
-      !xe ||
-      xe.paused
-    )
-      return;
-    var ch = X.channel,
-      gen = Zr,
-      start = "number" == typeof mark ? mark : Number(xe.currentTime) || 0;
-    liveStallTimer = setTimeout(function () {
-      liveStallTimer = null;
-      if (
-        "live" !== X.playerMode ||
-        "player" !== X.screen ||
-        X.channel !== ch ||
-        Zr !== gen ||
-        !xe ||
-        xe.paused
-      )
-        return;
-      var now = Number(xe.currentTime) || 0;
-      if (now > start + 0.3) {
-        liveStallRetries = 0;
-        liveStallStableSince = Date.now();
-        return void watchLiveStall(delay || 15000);
-      }
-      logLive("stall");
-      if (liveStallRetries < 1) {
-        liveStallRetries = 1;
-        liveStallStableSince = 0;
-        try {
-          var pl = xe.play();
-          pl && pl.catch && pl.catch(function () {});
-        } catch (e) {}
-        return void watchLiveStall(7e3, start);
-      }
-      if (liveStallRetries < 2) {
-        liveStallRetries = 2;
-        liveStallStableSince = 0;
-        logLive("reconnect");
-        jr("Reconectando señal…");
-        to(F[ch], !0, !0);
-      }
-    }, delay || 15000);
+    clearLiveStallWatch();
   }
   function to(e, t, force) {
     if (
@@ -9739,7 +9654,6 @@
         (liveStallRetries = 0),
         (liveStallLastTime = -1),
         (liveStallStableSince = 0));
-      liveErrRetries = 0;
       clearLiveStallWatch();
       logLive("zap");
       var a = function () {
