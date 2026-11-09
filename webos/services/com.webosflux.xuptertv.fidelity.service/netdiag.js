@@ -189,11 +189,17 @@ function checkHost(e, r) {
       o());
   });
   var i = now();
-  dnsx.queryDoh(e, function (e, r) {
-    ((t.doh.ms = now() - i),
-      e ? (t.doh.error = e.message) : ((t.doh.ok = !0), (t.doh.ips = r)),
-      o());
-  });
+  dnsx.resolve(e, function (err, res) {
+    t.doh.ms = now() - i;
+    if (err || !res || !res.ips || !res.ips.length) {
+      t.doh.error = (err && err.message) || "sin respuesta";
+    } else {
+      t.doh.ok = !0;
+      t.doh.ips = res.ips;
+      t.doh.source = res.source;
+    }
+    o();
+  }, { dohOnly: !0 });
 }
 function checkProvider(e, r) {
   now();
@@ -303,9 +309,10 @@ function run(e, r) {
       );
     }),
     c = !1,
-    a = 2,
+    a = 3,
     h = [],
-    p = [];
+    p = [],
+    pub = null;
   function l(t) {
     c ||
       ((c = !0),
@@ -317,6 +324,7 @@ function run(e, r) {
         verdict: verdictOf(p, h),
         providers: h,
         hosts: p,
+        publicIp: pub,
         cache: dnsx.summary(),
         screen: e.screen || null,
         partial: !!t,
@@ -334,6 +342,17 @@ function run(e, r) {
     }),
     parallel(i, function (e) {
       ((p = e), f());
+    }),
+    withDeadline(
+      function (r) {
+        checkPublicIp(r);
+      },
+      LAYER_DEADLINE,
+      function () {
+        return { ok: !1, timeout: !0, error: "sin respuesta", ms: LAYER_DEADLINE };
+      }
+    )(function (e) {
+      ((pub = e), f());
     }));
 }
 function layerProbe(e, r, t) {
@@ -403,13 +422,73 @@ function layerProbe(e, r, t) {
 function checkSession(e, r) {
   if (!e) return r({ ok: !1, error: "sin-sesion" });
   var t = e.userId && String(e.userId).length > 2,
-    n = e.userToken && String(e.userToken).length > 2;
+    n = e.userToken && String(e.userToken).length > 2,
+    seed = !!e.usingSeed;
   r({
     ok: !(!t || !n),
     userId: t ? "✓" : "✗",
     token: n ? "✓" : "✗",
     ready: !!e.ready,
+    usingSeed: seed,
+    note: seed ? "semilla prestada (la activación real v8/active no funcionó)" : "",
+    lastError: e.error || e.lastError || "",
     error: t && n ? "" : e.error || "sesion-incompleta",
+  });
+}
+
+/* IP publica real de la TV (resuelta por DoH, sin tocar el DNS del operador).
+   Sirve para saber si el portal bloquea la ZONA: si esta IP está en un rango
+   bloqueado, v8/active responde portal100024 aunque el DNS esté perfecto. */
+function checkPublicIp(cb) {
+  cb = cb || function () {};
+  var started = now(),
+    done = !1;
+  function finish(v) {
+    if (done) return;
+    done = !0;
+    v = v || {};
+    v.ms = now() - started;
+    cb(v);
+  }
+  var url = require("url"),
+    target = url.parse("https://api.ipify.org/?format=json");
+  dnsx.prepare(target, function (err, opts) {
+    if (err) return finish({ ok: !1, error: (err && err.message) || "sin DNS" });
+    var req;
+    try {
+      req = https.request(opts, function (res) {
+        var body = [];
+        (res.on("data", function (c) {
+          body.push(c);
+        }),
+          res.on("error", function () {}),
+          res.on("end", function () {
+            var text = Buffer.concat(body).toString("utf8"),
+              ip = "";
+            try {
+              ip = (JSON.parse(text) || {}).ip || "";
+            } catch (e) {}
+            if (!ip) ip = (text.match(/\d+\.\d+\.\d+\.\d+/) || [""])[0];
+            finish(
+              ip
+                ? { ok: !0, ip: ip, status: res.statusCode }
+                : { ok: !1, error: "respuesta sin IP", status: res.statusCode }
+            );
+          }));
+      });
+      (req.setTimeout(HTTP_TIMEOUT, function () {
+        try {
+          req.abort();
+        } catch (e) {}
+        finish({ ok: !1, error: "tiempo agotado" });
+      }),
+        req.on("error", function (e) {
+          finish({ ok: !1, error: e.code || e.message });
+        }),
+        req.end());
+    } catch (e) {
+      finish({ ok: !1, error: e.message || "error https" });
+    }
   });
 }
 function runLayers(e, r) {
@@ -449,5 +528,7 @@ module.exports = {
   runLayers: runLayers,
   checkHost: checkHost,
   checkProvider: checkProvider,
+  checkPublicIp: checkPublicIp,
+  checkSession: checkSession,
   verdictOf: verdictOf,
 };

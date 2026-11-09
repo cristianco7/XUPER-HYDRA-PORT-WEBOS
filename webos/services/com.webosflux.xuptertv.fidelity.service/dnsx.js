@@ -42,6 +42,16 @@ var CACHE_MS = 6e5,
     { ip: "76.76.2.0", sni: "freedns.controld.com", path: "/p0/dns-query" },
     { ip: "116.202.176.26", sni: "doh.libredns.gr", path: "/dns-query" },
   ],
+  STATIC_BOOTSTRAP = {
+    "mptec.dhkrxuzcy.com": ["104.21.83.57", "172.67.214.241"],
+    "ftmrmy.jdfey0cd.com": ["104.21.77.97", "172.67.206.119"],
+    "fuxok.nguvmqhpk.com": ["104.21.1.145", "172.67.129.108"],
+    "eajmnp.hcgv1dt8.com": ["172.67.215.237", "104.21.16.208"],
+    "hinumz.a878kkoyc.com": ["172.67.140.134", "104.21.94.218"],
+    "krdwvd.swcaw7qx.com": ["172.67.139.240", "104.21.65.29"],
+    "osuhk.m3x8o50te.com": ["172.67.164.28", "104.21.65.148"],
+    "oogoy.f30c96w8.com": ["104.21.36.120", "172.67.193.253"]
+  },
   cache = {},
   dialIndex = {},
   mode = "auto";
@@ -243,6 +253,13 @@ function resolve(e, n, a) {
   if (r && !(a.preferDoh && "system" === r.source))
     return n(null, { host: e, ips: r.ips, source: r.source, at: r.at });
   var t = function (r) {
+    if (STATIC_BOOTSTRAP[e]) {
+      /* Respaldo de arranque: IPs conocidas de los hosts del portal cuando DoH
+         no responde. TTL corto (90 s) para que una IP caducada no se quede
+         clavada durante los 10 minutos del caché normal. */
+      var sb = keep(e, STATIC_BOOTSTRAP[e], "static", 9e4);
+      return n(null, { host: e, ips: sb.ips, source: sb.source, at: sb.at });
+    }
     if ("doh" === mode || a.dohOnly)
       return n(r || new Error("DoH sin respuesta"));
     systemLookup(e, function (t, o) {
@@ -279,6 +296,7 @@ function prepare(e, n) {
           ((i.hostname = dial(r, o.ips)),
             void 0 !== i.host && (i.host = i.hostname),
             i.servername || (i.servername = r));
+          delete i.preferDoh;
           var a = {};
           for (s in e.headers || {})
             Object.prototype.hasOwnProperty.call(e.headers, s) &&
@@ -291,7 +309,7 @@ function prepare(e, n) {
             (i._ip = i.hostname),
             (i._hostname = r),
             n(null, i));
-        })
+        }, { preferDoh: !0 === e.preferDoh })
     : n(new Error("sin host para conectar"));
 }
 function lookup(e, n, r) {

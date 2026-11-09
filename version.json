@@ -1,9 +1,9 @@
 {
-  "version": "2.2.94",
+  "version": "3.0.0",
   "name": "XuperTV",
   "minWebos": "1.0.0",
-  "ipkUrl": "https://github.com/cristianco7/XUPER-HYDRA-PORT-WEBOS/releases/download/v2.2.94/com.webosflux.xuptertv.fidelity_2.2.94_all.ipk",
-  "sha256": "9C6AE9DB43E7840388D8B537A4AB8130E16C3C1B673C44C6961A6106EDB46AC5",
-  "changelog": "TV en vivo: arreglada la lista incompleta al filtrar por categoria (por ejemplo 24/7). El portal entrega la ultima pagina VACIA cuando el total es multiplo de 20 (24/7 tiene 100 canales: cinco paginas de 20 y una sexta vacia) y el pintado de la lista vivia dentro de la condicion 'la pagina trajo canales', asi que esa pagina vacia no repintaba nada y la lista se quedaba clavada en los 20 canales de la primera pagina (terminaba en '24/7 Freddy's Nightmares'). Ahora el repintado se hace siempre que la pagina responde, incluida la vacia final, y ademas una pagina intermedia que falle se reintenta hasta dos veces antes de rendirse (antes cortaba la lista en silencio). Tambien se mantiene el aviso en pantalla si aun asi queda incompleta.",
-  "releaseDate": "2026-11-08"
+  "ipkUrl": "https://github.com/cristianco7/XUPER-HYDRA-PORT-WEBOS/releases/download/v3.0.0/com.webosflux.xuptertv.fidelity_3.0.0_all.ipk",
+  "sha256": "BA22721937BAE2743D605A595DD621DE18ECF20BFBAB075581C93089F008AA7A",
+  "changelog": "Versión 3.0.0: mantiene las correcciones de red y TV en vivo de 2.2.98. El foco del carrusel ahora desplaza cada tarjeta completa a la vista, incluido Ver más. Las filas de proveedor consultan páginas adicionales y las secciones se muestran paginadas sin recortar la última fila.",
+  "releaseDate": "2026-11-09"
 }
