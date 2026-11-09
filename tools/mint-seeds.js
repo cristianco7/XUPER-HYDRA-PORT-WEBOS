@@ -53,6 +53,8 @@ var OUT_FILE = path.resolve(arg("out", POOL_FILE));
 });
 
 var magis = require(path.join(SVC_DIR, "magis.js"));
+var upstream = require(path.join(SVC_DIR, "upstream.js"));
+var https = require("https");
 
 function nowSec() {
   return Math.floor(Date.now() / 1000);
@@ -72,6 +74,81 @@ function resetSession() {
   s.usesSeed = false;
   s.at = 0;
   s.lastError = "";
+}
+
+function fetchLatamProxies(cb) {
+  var url = "https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=5000&country=CO,MX,PE,EC&ssl=yes";
+  https.get(url, function (res) {
+    var data = "";
+    res.on("data", function (c) { data += c; });
+    res.on("end", function () {
+      var list = data.split(/\r?\n/).map(function (s) { return s.trim(); }).filter(Boolean);
+      cb(null, list);
+    });
+  }).on("error", function () {
+    cb(null, []);
+  });
+}
+
+function probeProxy(proxy, cb) {
+  upstream.configure("http://" + proxy);
+  resetSession();
+  var done = false;
+  var timer = setTimeout(function () {
+    if (done) return;
+    done = true;
+    cb(new Error("timeout"));
+  }, 6000);
+
+  magis.ensureSession(function (err) {
+    if (done) return;
+    done = true;
+    clearTimeout(timer);
+    if (err) return cb(err);
+    if (magis.session.usesSeed || !magis.session.userId) return cb(new Error("bloqueado"));
+    cb(null, proxy);
+  });
+}
+
+function ensureWorkingRoute(cb) {
+  var forcedProxy = arg("proxy", "");
+  if (forcedProxy) {
+    log("usando proxy forzado por argumento: " + forcedProxy);
+    upstream.configure(forcedProxy);
+    return cb(null);
+  }
+
+  log("verificando conectividad directa con el portal...");
+  resetSession();
+  magis.ensureSession(function (err) {
+    if (!err && !magis.session.usesSeed && magis.session.userId) {
+      log("conexión directa funcional (zona no bloqueada)");
+      return cb(null);
+    }
+    log("conexión directa bloqueada por región (portal100024); buscando proxy regional LatAm para GitHub Actions...");
+    fetchLatamProxies(function (err2, list) {
+      if (!list || !list.length) {
+        log("no se obtuvieron proxies de la lista");
+        return cb(new Error("sin proxies disponibles"));
+      }
+      log("analizando " + list.length + " proxies candidatos de LatAm...");
+      var idx = 0;
+      function tryNext() {
+        if (idx >= list.length) {
+          return cb(new Error("ningún proxy LatAm respondió"));
+        }
+        var p = list[idx++];
+        probeProxy(p, function (err3, ok) {
+          if (!err3 && ok) {
+            log("proxy LatAm activo y desbloqueado: " + ok);
+            return cb(null);
+          }
+          tryNext();
+        });
+      }
+      tryNext();
+    });
+  });
 }
 
 /* Una semilla nueva: activación anónima real + catálogo real.
@@ -219,4 +296,10 @@ function done(aborted) {
   process.exitCode = 0;
 }
 
-next();
+ensureWorkingRoute(function (err) {
+  if (err) {
+    log("No se pudo establecer ruta sin bloqueo: " + (err.message || err));
+    return done(true);
+  }
+  next();
+});
