@@ -1383,7 +1383,8 @@
     }
     wt();
   }
-  var dt = 0;
+  var dt = 0,
+    notifyTimer = null;
   function ct() {
     var e = Date.now();
     if (!(e - dt < 250))
@@ -2383,7 +2384,12 @@
           '<svg viewBox="0 0 30 22"><path d="M15 19.5a2.1 2.1 0 1 1 0-4.2 2.1 2.1 0 0 1 0 4.2z" fill="currentColor"/><path d="M8.4 12.2a9.6 9.6 0 0 1 13.2 0" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M4.2 7.6a15.6 15.6 0 0 1 21.6 0" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>'),
           te.appendChild(l));
         var d = e("div", "notify-time");
-        ((d.id = "notify-time"), te.appendChild(d), yt(), setInterval(yt, 3e4));
+        /* Reutilizar el intervalo: gt() se repite al recargar el catalogo y
+           antes se acumulaba un timer nuevo en cada reconstruccion. */
+        ((d.id = "notify-time"),
+          te.appendChild(d),
+          yt(),
+          notifyTimer || (notifyTimer = setInterval(yt, 3e4)));
       })());
   }
   function yt() {
@@ -6636,8 +6642,23 @@
   }
   var pn = [],
     un = {},
+    unKeys = [],
+    UN_MAX = 150,
     vn = {},
     fn = null;
+  /* La info de pistas por titulo se acota para que recorrer el catalogo no
+     acumule memoria indefinidamente en TVs de 1 GB. */
+  function setStreamInfo(e, t) {
+    if (!e) return t;
+    if (!un[e]) {
+      unKeys.push(e);
+      if (unKeys.length > UN_MAX) {
+        var a = unKeys.shift();
+        a !== e && delete un[a];
+      }
+    }
+    return (un[e] = t);
+  }
   function hn(e) {
     if (!e) return 0;
     var t = e.replace(",", ".").split(":");
@@ -6783,7 +6804,7 @@
           var i = vn[a] || [];
           delete vn[a];
           var n = !e && t && !1 !== t.returnValue ? t : null;
-          n && ((un[a] = n), An(n));
+          n && (setStreamInfo(a, n), An(n));
           for (var r = 0; r < i.length; r++)
             try {
               i[r](n);
@@ -9251,7 +9272,7 @@
           selected: n.selectedTrack || {},
           duration: n.duration || 0,
         };
-        ((un[Ln(e)] = r), An(r));
+        (setStreamInfo(Ln(e), r), An(r));
         try {
           window.__xuperStreamInfo = {
             selectedTrack: n.selectedTrack || {},
