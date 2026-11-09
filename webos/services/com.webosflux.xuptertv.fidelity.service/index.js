@@ -553,7 +553,9 @@ function startHttpApi() {
             proxy.start(function (s) {
               if (s)
                 return respond(e, null, { url: a, proxyPath: a, isHls: !0 });
-              var t = proxy.add(a, {}, 0, r);
+              var chName = String((r && r.name) || "");
+              var is247 = /24[\s\/-]?7/i.test(chName);
+              var t = proxy.add(a, {}, 0, r, null, !0, is247);
               respond(e, null, {
                 url: a,
                 proxyPath: proxy.baseUrl() + "/media/" + t + "/stream.m3u8",
@@ -578,7 +580,9 @@ function startHttpApi() {
             var t = (s && s.ips && s.ips[0]) || "";
             proxy.start(function (r) {
               if (r) return fail(e, r);
-              var s = proxy.add(a.url, a.headers, 0, t, a.backupUrls, !0);
+              var chName = String((a && a.name) || (r && r.name) || "");
+              var is247 = /24[\s\/-]?7/i.test(chName);
+              var s = proxy.add(a.url, a.headers, 0, t, a.backupUrls, !0, is247);
               ((a.proxyPath =
                 proxy.baseUrl() + "/media/" + s + "/stream.m3u8"),
                 (a.isHls = !0),

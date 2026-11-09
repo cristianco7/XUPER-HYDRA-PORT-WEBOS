@@ -1,6 +1,6 @@
 !(function () {
   "use strict";
-  var APP_VERSION = "3.0.3";
+  var APP_VERSION = "3.0.4";
   function e(e, t, a) {
     var i = document.createElement(e);
     return (t && (i.className = t), null != a && (i.textContent = a), i);
@@ -9675,8 +9675,8 @@
           P(
             "resolveLive",
             e.streamUrl
-              ? { streamUrl: e.streamUrl, force: force ? 1 : 0 }
-              : { channelCode: e.channelCode, force: force ? 1 : 0 },
+              ? { streamUrl: e.streamUrl, force: force ? 1 : 0, name: e.name || "" }
+              : { channelCode: e.channelCode, force: force ? 1 : 0, name: e.name || "" },
             function (e, a) {
               if (t === Zr) {
                 if (e || !a || !1 === a.returnValue)

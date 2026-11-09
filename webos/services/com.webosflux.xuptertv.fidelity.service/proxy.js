@@ -111,7 +111,7 @@ function normalizeBackups(e) {
   }
   return t;
 }
-function add(e, t, r, n, o, live) {
+function add(e, t, r, n, o, live, is247) {
   var s = crypto.randomBytes(12).toString("hex"),
     a = {
       url: e,
@@ -125,6 +125,8 @@ function add(e, t, r, n, o, live) {
       /* TV en vivo: sus segmentos se piden de nuevo cada pocos segundos y el
          CDN a veces cierra el socket justo al reutilizarlo (ECONNRESET). */
       isLive: !!live,
+      is247: !!is247,
+      manifestCount: 0,
       at: Date.now(),
     };
   remember(s, a);
@@ -394,23 +396,28 @@ function hlsChildUrl(e, t, r) {
     ? baseUrl() + "/hls/" + e + "/" + base64Url(urlmod.resolve(t, r))
     : r;
 }
-function rewriteHlsManifest(e, t, r) {
-  for (
-    var n = String(e || "")
-        .replace(/^\uFEFF/, "")
-        .split(/\r?\n/),
-      o = 0;
-    o < n.length;
-    o++
-  ) {
+function rewriteHlsManifest(e, t, r, is247, isFirst) {
+  var n = String(e || "")
+      .replace(/^\uFEFF/, "")
+      .split(/\r?\n/),
+    segIdxs = [];
+  for (var o = 0; o < n.length; o++) {
     var s = n[o];
-    s &&
-      ("#" !== s.charAt(0)
-        ? (n[o] = hlsChildUrl(t, r, s))
-        : -1 !== s.indexOf("URI=") &&
-          (n[o] = s.replace(/URI=("|')([^"']+)\1/g, function (e, n, o) {
-            return "URI=" + n + hlsChildUrl(t, r, o) + n;
-          })));
+    if (s) {
+      if ("#" !== s.charAt(0)) {
+        segIdxs.push(o);
+        n[o] = hlsChildUrl(t, r, s);
+      } else if (-1 !== s.indexOf("URI=")) {
+        n[o] = s.replace(/URI=("|')([^"']+)\1/g, function (e, n, o) {
+          return "URI=" + n + hlsChildUrl(t, r, o) + n;
+        });
+      }
+    }
+  }
+  if (is247 && isFirst && segIdxs.length >= 5) {
+    var keep = Math.max(2, segIdxs.length - 3);
+    var cutAt = segIdxs[keep - 1];
+    n = n.slice(0, cutAt + 1);
   }
   return n.join("\n");
 }
@@ -505,10 +512,14 @@ function forward(e, t, r, n) {
                 p();
               }),
               void o.on("end", function () {
+                var isFirst = !r.manifestCount;
+                r.manifestCount = (r.manifestCount || 0) + 1;
                 var e = rewriteHlsManifest(
                   Buffer.concat(h).toString("utf8"),
                   n,
-                  r.url
+                  r.url,
+                  r.isLive && r.is247,
+                  isFirst
                 );
                 (delete d["Content-Length"],
                   delete d["Content-Range"],
