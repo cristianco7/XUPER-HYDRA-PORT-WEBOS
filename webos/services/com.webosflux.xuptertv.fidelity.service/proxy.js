@@ -758,6 +758,9 @@ function handler(e, t) {
         }),
         void t.end("invalid hls child")
       );
+    var childHost = urlmod.parse(a).hostname,
+      parentHost = urlmod.parse(s.url || "").hostname,
+      pinnedIp = childHost === parentHost && s.resolvedIp ? s.resolvedIp : "";
     return void forward(
       e,
       t,
@@ -765,6 +768,7 @@ function handler(e, t) {
         url: a,
         headers: s.headers,
         duration: 0,
+        resolvedIp: pinnedIp,
         backupUrls: s.backupUrls,
         backupIndex: s.backupIndex,
         isLive: s.isLive,

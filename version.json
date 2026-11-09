@@ -3,7 +3,7 @@
   "name": "XuperTV",
   "minWebos": "1.0.0",
   "ipkUrl": "https://github.com/cristianco7/XUPER-HYDRA-PORT-WEBOS/releases/download/v3.0.3/com.webosflux.xuptertv.fidelity_3.0.3_all.ipk",
-  "sha256": "2477ECACBDA9E5436778FE3EFCF76D2BA6BDF5841C81D827E11C466FCB356424",
+  "sha256": "03088C12CCD42A09841F81ED3DE7B4EC4AAA3D332C4CE02D5A71BFBB767988F6",
   "changelog": "Versión 3.0.3: restauración del motor nativo limpio de TV en vivo (2.2.45/2.2.87). Se elimina el bucle de seek en HLS que congelaba la imagen en pantalla negra, se restablece start: 0 en Starfish y el reseteo limpio entre canales con reintento compatible.",
   "releaseDate": "2026-11-09"
 }
