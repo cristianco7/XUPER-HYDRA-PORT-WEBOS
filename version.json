@@ -3,7 +3,7 @@
   "name": "XuperTV",
   "minWebos": "1.0.0",
   "ipkUrl": "https://github.com/cristianco7/XUPER-HYDRA-PORT-WEBOS/releases/download/v3.0.4/com.webosflux.xuptertv.fidelity_3.0.4_all.ipk",
-  "sha256": "73231F46DCF4D7817C87663758399BBE398EAEEAEC2E2BB70F3605CDEC030F50",
+  "sha256": "EF57F27F5C67E48E96B0FE3C15F72DA0547F5AFD528D6F9F3C164982F045578F",
   "changelog": "Versión 3.0.4: buffer de seguridad HLS de 15 segundos para canales 24/7. El proxy entrega un colchón de 3 segmentos que absorbe los desfases de fotogramas del transcodificador, eliminando los micro-saltos de escena.",
   "releaseDate": "2026-11-09"
 }
