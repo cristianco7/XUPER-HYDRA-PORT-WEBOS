@@ -1,6 +1,6 @@
 !(function () {
   "use strict";
-  var APP_VERSION = "3.0.2";
+  var APP_VERSION = "3.0.3";
   function e(e, t, a) {
     var i = document.createElement(e);
     return (t && (i.className = t), null != a && (i.textContent = a), i);
@@ -9033,14 +9033,9 @@
       try {
         xe.pause();
       } catch (e) {}
-      /* Un VOD sí debe comenzar desde cero. En HLS en vivo, en cambio, el
-         reloj del manifiesto puede usar PTS absolutos (como 72000 s). Forzar
-         currentTime=0 hace que Starfish intente conciliar ambos relojes y
-         termine regresando o saltando a segmentos ya reproducidos. */
-      if ("live" !== X.playerMode)
-        try {
-          xe.currentTime = 0;
-        } catch (e) {}
+      try {
+        xe.currentTime = 0;
+      } catch (e) {}
       xe.removeAttribute("src");
       try {
         xe.src = "";
@@ -9139,6 +9134,15 @@
       ((xe.onerror = function () {
         (Gn(), Nr(), logLive("err"));
         var t = xe.error && xe.error.code;
+        if (4 === t && "live" === X.playerMode && o && !a) {
+          var i = Zr;
+          return (
+            jr("Reintentando señal con compatibilidad webOS…"),
+            void setTimeout(function () {
+              "live" === X.playerMode && Zr === i && Gr(e, { nativeHls: !0 });
+            }, 0)
+          );
+        }
         if (
           4 === t &&
           "vod" === X.playerMode &&
@@ -9269,22 +9273,6 @@
                     Date.now() - liveStallStableSince >= 3e4 &&
                     (liveStallRetries = 0);
                 }
-                if (xe && xe.buffered && xe.buffered.length > 0) {
-                  try {
-                    var b = xe.buffered;
-                    var lastIdx = b.length - 1;
-                    var bStart = b.start(lastIdx);
-                    if (liveTime < bStart - 0.5 && b.end(lastIdx) > bStart) {
-                      console.log(
-                        "[live] Discontinuidad de PTS: cur=" +
-                          liveTime +
-                          " -> " +
-                          bStart
-                      );
-                      xe.currentTime = bStart;
-                    }
-                  } catch (e) {}
-                }
               })(),
             !X.streamError &&
               (xe.currentTime > 0 || xe.readyState >= 2) &&
@@ -9358,39 +9346,16 @@
              vigilante: "waiting" se dispara de forma normal entre segmentos
              de una señal en vivo. */
           Pr("Cargando vídeo…");
-          if (
-            "live" === X.playerMode &&
-            xe &&
-            xe.buffered &&
-            xe.buffered.length > 0
-          ) {
-            try {
-              var b = xe.buffered,
-                cur = Number(xe.currentTime) || 0,
-                lastIdx = b.length - 1,
-                bStart = b.start(lastIdx);
-              if (cur < bStart - 0.5 && b.end(lastIdx) > bStart) {
-                console.log(
-                  "[live] Discontinuidad en espera: cur=" +
-                    cur +
-                    " -> saltando a " +
-                    bStart
-                );
-                xe.currentTime = bStart;
-              }
-            } catch (e) {}
-          }
         }),
         (xe.onstalled = function () {
           Pr("Conectando…");
         }));
-      var isLive = "live" === X.playerMode;
       for (
         var l = {
             mediaTransportType: o ? "HLS" : "URI",
             option: {
               transmission: {
-                playTime: { start: o && isLive ? -1 : 0 },
+                playTime: { start: 0 },
               },
             },
           },
@@ -9416,10 +9381,9 @@
         try {
           xe.src = e;
         } catch (e) {}
-      if (!isLive)
-        try {
-          xe.currentTime = 0;
-        } catch (e) {}
+      try {
+        xe.currentTime = 0;
+      } catch (e) {}
       (xe.classList.add("is-active"), Te && (Te.style.display = "none"));
       try {
         xe.load();
