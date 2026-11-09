@@ -759,8 +759,17 @@ function handler(e, t) {
         void t.end("invalid hls child")
       );
     var childHost = urlmod.parse(a).hostname,
-      parentHost = urlmod.parse(s.url || "").hostname,
-      pinnedIp = childHost === parentHost && s.resolvedIp ? s.resolvedIp : "";
+      pinnedIp = "";
+    s.childIps || (s.childIps = {});
+    if (s.childIps[childHost]) {
+      pinnedIp = s.childIps[childHost];
+    } else {
+      var cd = dnsx.cached(childHost);
+      if (cd && cd.ips && cd.ips.length) {
+        pinnedIp = cd.ips[0];
+        s.childIps[childHost] = pinnedIp;
+      }
+    }
     return void forward(
       e,
       t,
