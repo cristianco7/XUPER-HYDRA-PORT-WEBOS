@@ -1,6 +1,6 @@
 !(function () {
   "use strict";
-  var APP_VERSION = "3.0.5";
+  var APP_VERSION = "3.0.4";
   function e(e, t, a) {
     var i = document.createElement(e);
     return (t && (i.className = t), null != a && (i.textContent = a), i);
@@ -9297,28 +9297,6 @@
           }
         }),
         (xe.onpause = function () {
-          if (
-            "live" === X.playerMode &&
-            xe &&
-            "player" === X.screen &&
-            !X.streamError
-          ) {
-            clearLiveStallWatch();
-            liveStallTimer = setTimeout(function () {
-              if (
-                "live" === X.playerMode &&
-                xe &&
-                xe.paused &&
-                "player" === X.screen &&
-                !X.streamError
-              ) {
-                try {
-                  var p = xe.play();
-                  p && p.catch && p.catch(function () {});
-                } catch (e) {}
-              }
-            }, 3000);
-          }
           (ri(), "vod" === X.playerMode) &&
             (sn(
               br ? Cr + (xe.currentTime || 0) : xe.currentTime || 0,
@@ -9364,42 +9342,13 @@
             }, 500)));
         }),
         (xe.onwaiting = function () {
+          /* Solo el aviso visual, como en la 2.2.77. Aquí NO se arma el
+             vigilante: "waiting" se dispara de forma normal entre segmentos
+             de una señal en vivo. */
           Pr("Cargando vídeo…");
-          if ("live" === X.playerMode && xe && "player" === X.screen) {
-            clearLiveStallWatch();
-            liveStallTimer = setTimeout(function () {
-              if (
-                "live" === X.playerMode &&
-                xe &&
-                "player" === X.screen &&
-                !X.streamError
-              ) {
-                try {
-                  var p = xe.play();
-                  p && p.catch && p.catch(function () {});
-                } catch (e) {}
-              }
-            }, 4000);
-          }
         }),
         (xe.onstalled = function () {
           Pr("Conectando…");
-          if ("live" === X.playerMode && xe && "player" === X.screen) {
-            clearLiveStallWatch();
-            liveStallTimer = setTimeout(function () {
-              if (
-                "live" === X.playerMode &&
-                xe &&
-                "player" === X.screen &&
-                !X.streamError
-              ) {
-                try {
-                  var p = xe.play();
-                  p && p.catch && p.catch(function () {});
-                } catch (e) {}
-              }
-            }, 5000);
-          }
         }));
       for (
         var l = {

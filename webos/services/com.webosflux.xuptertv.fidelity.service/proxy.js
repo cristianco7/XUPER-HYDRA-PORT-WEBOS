@@ -415,7 +415,7 @@ function rewriteHlsManifest(e, t, r, is247, isFirst) {
     }
   }
   if (is247 && isFirst && segIdxs.length >= 5) {
-    var keep = Math.max(2, segIdxs.length - 4);
+    var keep = Math.max(2, segIdxs.length - 3);
     var cutAt = segIdxs[keep - 1];
     n = n.slice(0, cutAt + 1);
   }
