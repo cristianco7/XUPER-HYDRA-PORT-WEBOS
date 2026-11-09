@@ -1,9 +1,9 @@
 {
-  "version": "3.0.2",
+  "version": "3.0.3",
   "name": "XuperTV",
   "minWebos": "1.0.0",
-  "ipkUrl": "https://github.com/cristianco7/XUPER-HYDRA-PORT-WEBOS/releases/download/v3.0.2/com.webosflux.xuptertv.fidelity_3.0.2_all.ipk",
-  "sha256": "22DC447DAFEE1623CC74F2333998720D3255415FE66D635DB5C834ECCEE5577A",
-  "changelog": "Versión 3.0.2: corrige TV en vivo con timestamps HLS absolutos. La app ya no fuerza la posición 0 al iniciar un canal, evitando que Starfish salte hacia atrás o a segmentos ya emitidos. Conserva proxy local, DNS seguro DoH y la reproducción de películas/series.",
+  "ipkUrl": "https://github.com/cristianco7/XUPER-HYDRA-PORT-WEBOS/releases/download/v3.0.3/com.webosflux.xuptertv.fidelity_3.0.3_all.ipk",
+  "sha256": "2477ECACBDA9E5436778FE3EFCF76D2BA6BDF5841C81D827E11C466FCB356424",
+  "changelog": "Versión 3.0.3: restauración del motor nativo limpio de TV en vivo (2.2.45/2.2.87). Se elimina el bucle de seek en HLS que congelaba la imagen en pantalla negra, se restablece start: 0 en Starfish y el reseteo limpio entre canales con reintento compatible.",
   "releaseDate": "2026-11-09"
 }
