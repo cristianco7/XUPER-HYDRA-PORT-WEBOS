@@ -378,6 +378,15 @@ function startHttpApi() {
     seeds: safeValue(function () {
       return magis.seedStatus ? magis.seedStatus() : null;
     }, null),
+    session: safeValue(function () {
+      return {
+        ready: !!magis.session.ready,
+        usingSeed: !!magis.session.usesSeed,
+        userId: magis.session.userId ? "ok" : "",
+        token: magis.session.userToken ? "ok" : "",
+        lastError: magis.session.lastError || "",
+      };
+    }, null),
     proxyStats: safeValue(function () {
       return proxy.stats ? proxy.stats() : null;
     }, null),
@@ -591,15 +600,31 @@ function startHttpApi() {
     e.respond({ returnValue: !0 });
   }),
   service.register("prewarm", function (e) {
-    needModule(e, magis, "./magis") &&
-      magis.ensureSession(function (r) {
-        if (r) return fail(e, r);
-        e.respond({
-          returnValue: !0,
-          sn: magis.session.sn,
-          userId: magis.session.userId,
-        });
+    if (!needModule(e, magis, "./magis")) return;
+    var r = e.payload || {};
+    /* force:1 reinicia la sesión y obliga una activación REAL (v8/active) en
+       lugar de devolver una semilla prestada. Lo usa el diagnóstico para ver
+       el error exacto del portal cuando la TV está en un país bloqueado. */
+    if (r.force) {
+      ((magis.session.ready = !1),
+        (magis.session.userId = ""),
+        (magis.session.userToken = ""),
+        (magis.session.snToken = ""),
+        (magis.session.seed = null),
+        (magis.session.usesSeed = !1),
+        (magis.session.at = 0),
+        (magis.session.lastError = ""));
+    }
+    magis.ensureSession(function (r) {
+      if (r) return fail(e, r);
+      e.respond({
+        returnValue: !0,
+        sn: magis.session.sn,
+        userId: magis.session.userId,
+        usingSeed: !!magis.session.usesSeed,
+        lastError: magis.session.lastError || "",
       });
+    });
   }),
   service.register("netdiag", function (e) {
     if (
@@ -664,6 +689,8 @@ function startHttpApi() {
               userId: a.userId || "",
               userToken: a.userToken || "",
               ready: !!a.ready,
+              usingSeed: !!a.usesSeed,
+              lastError: a.lastError || "",
               error: e ? e.message || "error" : "",
             },
             liveUrl: r.liveUrl || "",

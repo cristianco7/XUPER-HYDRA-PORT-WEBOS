@@ -1,6 +1,6 @@
 !(function () {
   "use strict";
-  var APP_VERSION = "2.2.94";
+  var APP_VERSION = "3.0.0";
   function e(e, t, a) {
     var i = document.createElement(e);
     return (t && (i.className = t), null != a && (i.textContent = a), i);
@@ -1236,6 +1236,7 @@
     else if (X.categoryPickerOpen) root = t("player-categories");
     else if ("detail" === X.screen) root = t("screen-detail");
     else if ("search" === X.screen) root = t("screen-search");
+    else if ("section" === X.screen) root = t("screen-section");
     else if ("settings" === X.screen) root = t("screen-settings");
     else if ("player" === X.screen) root = t("screen-player");
     else if ("home" === X.screen) {
@@ -1454,6 +1455,7 @@
                                 }
                               })());
           if ("detail" !== X.screen) {
+            if ("section" === X.screen) return void closeSection();
             if ("search" === X.screen)
               return (
                 Da(),
@@ -1496,13 +1498,19 @@
             n &&
               (n.classList.remove("is-mini"), n.classList.remove("is-active"));
             var r = X.detailReturn;
-            r && "search" === r.screen
-              ? (lt("search"), rt(r.focus))
-              : (lt("home"),
+            if (r && "search" === r.screen) {
+              lt("search");
+              rt(r.focus);
+            } else if (r && "section" === r.screen) {
+              lt("section");
+              rt(r.focus);
+            } else {
+              (lt("home"),
                 bt(X.tab, !1),
                 r && r.focus && at(r.focus)
                   ? rt(r.focus)
                   : Ue[X.tab] && rt(Ue[X.tab]));
+            }
           }
         }
       else vt();
@@ -2451,6 +2459,8 @@
               root = t("screen-detail");
             } else if ("search" === X.screen) {
               root = t("screen-search");
+            } else if ("section" === X.screen) {
+              root = t("screen-section");
             } else {
               root = document;
             }
@@ -3923,18 +3933,12 @@
     return a.length ? a : l;
   }
   function ma(t, a, n, r) {
-    if (!a || !a.length) return n;
-    var o = n || 860,
-      s = e("div", "kids-subtitle", r || "Catálogo");
-    (i(s, 192, o, 1249, 40), t.appendChild(s), (o += 50));
-    for (var l = Math.min(a.length, 120), d = 0; d < l; d++) {
-      var c = 192 + 276 * (d % 6),
-        p = o + 390 * Math.floor(d / 6);
-      t.appendChild(xt(a[d], c, p, 250, 360, { gold: !0 }));
-    }
-    return o + 390 * Math.ceil(l / 6) + 25;
+    /* El camino alterno usaba hasta 120 pósteres a la vez. En TVs con poca
+       RAM eso acumulaba imágenes y nodos aunque los rieles principales ya
+       fueran ligeros. Usa exactamente el mismo riel de 10 + "Ver más". */
+    return ga(t, a, n, r || "Catálogo");
   }
-  function ga(t, a, n, r) {
+  function ga(t, a, n, r, sectionInfo) {
     if (!a || !a.length) return n;
     var o = n || 860,
       s = e("div", "kids-subtitle", r || "Catálogo");
@@ -3954,24 +3958,47 @@
     l.style.webkitOverflowScrolling = "touch";
     l.classList.add("catalog-rail");
     l.style.minWidth = "1656px";
-    d = Math.min(a.length, 50);
-    for (c = 0; c < d; c++) {
-      var poster = xt(a[c], 276 * c, 0, 250, 360, { gold: !0 });
-      poster._onMove = (function (rail, idx, total) {
+    /* Fila estilo XuperTV: como máximo 10 tarjetas y, si hay más títulos,
+       una tarjeta "··· Ver más" que abre la sección completa en su propia
+       pantalla. El retorno al primer elemento del riel se mantiene. */
+    var MAX_RAIL = 10,
+      /* Las filas de proveedor (Disney, Netflix, HBO, etc.) pueden llegar
+         incompletas en Inicio. Se conserva su acceso "Ver más" aunque aún
+         traigan 10 o menos: al abrirlo consulta páginas adicionales. */
+      hasMore = a.length > MAX_RAIL || !!(sectionInfo && sectionInfo.query),
+      total = Math.min(a.length, MAX_RAIL) + (hasMore ? 1 : 0),
+      revealRailCard = function (rail, card) {
+        if (!card) return;
+        var left = card.offsetLeft || 0,
+          width = card.offsetWidth || 250,
+          viewport = rail.clientWidth || 1656,
+          current = rail.scrollLeft || 0,
+          padding = 38,
+          next = current;
+        if (left < current + padding) next = Math.max(0, left - padding);
+        else if (left + width > current + viewport - padding)
+          next = Math.max(0, left + width - viewport + padding);
+        rail.scrollLeft = next;
+      },
+      focusRailCard = function (rail, card) {
+        revealRailCard(rail, card);
+        rt(card);
+      },
+      railMove = function (rail, idx) {
         return function (dir) {
           if ("right" === dir) {
             if (idx < total - 1 && rail.children[idx + 1]) {
-              rt(rail.children[idx + 1]);
+              focusRailCard(rail, rail.children[idx + 1]);
               return !0;
             }
             if (rail.children[0]) {
               rail.scrollLeft = 0;
-              rt(rail.children[0]);
+              focusRailCard(rail, rail.children[0]);
               return !0;
             }
           } else if ("left" === dir) {
             if (idx > 0 && rail.children[idx - 1]) {
-              rt(rail.children[idx - 1]);
+              focusRailCard(rail, rail.children[idx - 1]);
               return !0;
             }
             if (Ue && Ue[X.tab]) {
@@ -3981,10 +4008,182 @@
           }
           return !1;
         };
-      })(l, c, d);
+      };
+    d = Math.min(a.length, MAX_RAIL);
+    for (c = 0; c < d; c++) {
+      var poster = xt(a[c], 276 * c, 0, 250, 360, { gold: !0 });
+      poster._onMove = railMove(l, c);
+      poster._onFocus = (function (rail, card) {
+        return function () {
+          revealRailCard(rail, card);
+        };
+      })(l, poster);
       l.appendChild(poster);
     }
+    if (hasMore) {
+      var moreCard = e("div", "poster gold focusable see-more");
+      (i(moreCard, 276 * d, 0, 250, 360),
+        moreCard.appendChild(e("div", "see-more-dots", "···")),
+        moreCard.appendChild(e("div", "see-more-label", "Ver más")),
+        moreCard.appendChild(
+          e(
+            "div",
+            "see-more-count",
+            sectionInfo && sectionInfo.query ? "Explorar catálogo" : a.length + " títulos"
+          )
+        ),
+        (moreCard._activate = function () {
+          openCatalogSection(r, a, sectionInfo);
+        }),
+        (moreCard._onMove = railMove(l, d)),
+        (moreCard._onFocus = function () {
+          revealRailCard(l, moreCard);
+        }),
+        l.appendChild(moreCard));
+    }
     return o + 360 + 35;
+  }
+  var sectionCatalogCache = {},
+    sectionCatalogLoading = {},
+    sectionRequestId = 0;
+  function sectionInfoFor(title, source) {
+    var text = o(String(source || "") + " " + String(title || "")),
+      hit = /disney|netflix|hbo|prime|apple|paramount|hulu/.exec(text),
+      year = /\b20[0-9][0-9]\b/.exec(text),
+      scope = /serie|series/.test(text)
+        ? "series"
+        : /pelicula|peliculas|movie|movies/.test(text)
+          ? "movies"
+          : "";
+    if (hit) return { query: hit[0], scope: scope };
+    if (year) return { query: year[0], scope: scope };
+    if (/marvel/.test(text)) return { query: "marvel", scope: scope };
+    if (/dragon ball/.test(text)) return { query: "dragon ball", scope: scope };
+    return null;
+  }
+  function sectionMergeItems(base, extra, scope) {
+    var out = [],
+      seen = {},
+      add = function (list) {
+        for (var i = 0; list && i < list.length; i++) {
+          var item = list[i];
+          if (!item || !item.id || seen[item.id]) continue;
+          if ("series" === scope && !x(item)) continue;
+          if ("movies" === scope && x(item)) continue;
+          seen[item.id] = !0;
+          out.push(item);
+        }
+      };
+    (add(base), add(extra));
+    return out;
+  }
+  function loadSectionCatalog(info, base, done) {
+    if (!info || !info.query) return done(base || []);
+    var key = info.query + ":" + (info.scope || "all"),
+      cached = sectionCatalogCache[key];
+    if (cached) return done(cached);
+    if (sectionCatalogLoading[key])
+      return void sectionCatalogLoading[key].push(done);
+    sectionCatalogLoading[key] = [done];
+    var collected = [],
+      page = 1,
+      finish = function () {
+        var merged = sectionMergeItems(base || [], collected, info.scope);
+        sectionCatalogCache[key] = merged;
+        var waiters = sectionCatalogLoading[key] || [];
+        delete sectionCatalogLoading[key];
+        for (var w = 0; w < waiters.length; w++) waiters[w](merged);
+      },
+      next = function () {
+        if (page > 2) return finish();
+        P("search", { value: info.query, pageNum: page++ }, function (err, result) {
+          var list = !err && result && result.items ? result.items : [];
+          for (var i = 0; i < list.length; i++) collected.push(list[i]);
+          list.length ? setTimeout(next, 30) : finish();
+        });
+      };
+    next();
+  }
+  /* Pantalla completa de una sección del catálogo (destino de "Ver más").
+     Renderiza una página a la vez: no deja decenas de pósteres fuera de
+     pantalla ocupando memoria ni recorta la última fila. */
+  function openCatalogSection(title, items, info) {
+    var scr = t("screen-section");
+    if (!scr) return;
+    var requestId = ++sectionRequestId;
+    X.sectionReturn = X.focus;
+    renderCatalogSection(title, items || [], 0, "Cargando sección…");
+    loadSectionCatalog(info, items || [], function (merged) {
+      if ("section" === X.screen && requestId === sectionRequestId)
+        renderCatalogSection(title, merged, 0, "");
+    });
+  }
+  function renderCatalogSection(title, items, page, loading) {
+    var scr = t("screen-section");
+    if (!scr) return;
+    var PAGE_SIZE = 24,
+      total = Math.max(1, Math.ceil((items || []).length / PAGE_SIZE));
+    page = Math.max(0, Math.min(total - 1, page || 0));
+    scr.innerHTML = "";
+    var back = e("div", "section-back focusable", "‹ Volver");
+    (i(back, 192, 92, 210, 64), (back._activate = closeSection), scr.appendChild(back));
+    var heading = e("div", "section-title", title || "Catálogo");
+    (i(heading, 432, 92, 760, 64), scr.appendChild(heading));
+    var count = e(
+      "div",
+      "section-count",
+      page + 1 + "/" + total + " · " + (items || []).length + " títulos"
+    );
+    (i(count, 1190, 104, 410, 44), scr.appendChild(count));
+    if (page > 0) {
+      var prev = e("div", "section-page-btn focusable", "‹ Anterior");
+      (i(prev, 1450, 98, 170, 52),
+        (prev._activate = function () {
+          renderCatalogSection(title, items, page - 1, "");
+        }),
+        scr.appendChild(prev));
+    }
+    if (page < total - 1) {
+      var nextButton = e("div", "section-page-btn focusable", "Siguiente ›");
+      (i(nextButton, 1640, 98, 208, 52),
+        (nextButton._activate = function () {
+          renderCatalogSection(title, items, page + 1, "");
+        }),
+        scr.appendChild(nextButton));
+    }
+    var grid = e("div", "section-grid scrollable");
+    i(grid, 192, 190, 1656, 754);
+    scr.appendChild(grid);
+    var inner = e("div", "section-grid-content"),
+      cols = 6,
+      start = page * PAGE_SIZE,
+      end = Math.min((items || []).length, start + PAGE_SIZE),
+      rows = Math.max(1, Math.ceil((end - start) / cols));
+    (i(inner, 0, 0, 1656, rows * 400), grid.appendChild(inner));
+    for (var k = start; k < end; k++) {
+      var localIndex = k - start;
+      var card = xt(
+        items[k],
+        (localIndex % cols) * 276,
+        Math.floor(localIndex / cols) * 400,
+        250,
+        360,
+        { gold: !0 }
+      );
+      inner.appendChild(card);
+    }
+    if (loading) {
+      var status = e("div", "section-loading", loading);
+      (i(status, 192, 910, 1000, 36), scr.appendChild(status));
+    }
+    (lt("section"), rt(inner.children[0] || back));
+  }
+  function closeSection() {
+    sectionRequestId++;
+    lt("home");
+    var r = X.sectionReturn;
+    if (r && at(r)) rt(r);
+    else Ue[X.tab] && rt(Ue[X.tab]);
   }
   function ya(e, t, a, i) {
     if (!t || !t.length) return a;
@@ -4009,11 +4208,11 @@
           return (parseFloat(t && t.score) || 0) - a;
         }),
         h = [];
-      for (r = 0; r < f.length && h.length < 15; r++) {
+      for (r = 0; r < f.length && h.length < 40; r++) {
         var m = f[r];
         m && m.id && (h.push(m));
       }
-      h.length && (u = ga(e, h, u, i.popularTitle));
+      h.length && (u = ga(e, h, u, i.popularTitle, sectionInfoFor(i.popularTitle, "")));
     }
     var g = {},
       y = [];
@@ -4099,12 +4298,8 @@
         if (T.length < 3) {
           for (d = 0; d < T.length; d++) fallbackList.push(T[d]);
         } else {
-          var _ = [];
-          for (d = 0; d < T.length && _.length < 15; d++) {
-            _.push(T[d]);
-          }
-          if (_.length) {
-            u = ga(e, _, u, w[x] || x);
+          if (T.length) {
+            u = ga(e, T, u, w[x] || x, sectionInfoFor(w[x] || x, x));
             S = !0;
             railsCount++;
           }
@@ -4113,11 +4308,11 @@
     }
     if (fallbackList.length && railsCount < maxRails) {
       var fallbackRail = [];
-      for (d = 0; d < fallbackList.length && fallbackRail.length < 15; d++) {
+      for (d = 0; d < fallbackList.length && fallbackRail.length < 60; d++) {
         fallbackRail.push(fallbackList[d]);
       }
       if (fallbackRail.length) {
-        u = ga(e, fallbackRail, u, i.fallbackRow || "Más títulos del catálogo");
+        u = ga(e, fallbackRail, u, i.fallbackRow || "Más títulos del catálogo", null);
         S = !0;
       }
     }
@@ -4174,12 +4369,16 @@
     var targetGenres = [];
     if (target.genres && target.genres.length) {
       for (var i = 0; i < target.genres.length; i++) {
-        targetGenres.push(String(target.genres[i]).toLowerCase());
+        var gText = String(target.genres[i] || "").toLowerCase().trim();
+        gText && targetGenres.push(gText);
       }
     }
-    var isAnime = (target.category && target.category.indexOf("anime") >= 0) || (targetGenres.indexOf("anime") >= 0);
-    var isMovie = target.kind === "pelicula" || target.type === "movie";
-    var isSeries = target.kind === "serie" || target.type === "teleplay";
+    var targetCat = String(target.category || "").toLowerCase();
+    var targetCountry = String(target.country || "").toLowerCase().trim();
+    var isAnime = targetCat.indexOf("anime") >= 0 ||
+                  targetGenres.indexOf("anime") >= 0 ||
+                  /jap[oó]n|japan|tokyo/i.test(targetCountry);
+    var isTargetSeries = x(target);
 
     var scored = [];
     for (var j = 0; j < catalog.length; j++) {
@@ -4188,36 +4387,56 @@
       if (baseT && getBaseSeriesTitle(item.title || "") === baseT) continue;
 
       var score = 0;
-      var cat = (item.category || "").toLowerCase();
+      var cat = String(item.category || "").toLowerCase();
       var itemGenres = [];
       if (item.genres && item.genres.length) {
         for (var k = 0; k < item.genres.length; k++) {
-          itemGenres.push(String(item.genres[k]).toLowerCase());
+          var ig = String(item.genres[k] || "").toLowerCase().trim();
+          ig && itemGenres.push(ig);
         }
       }
+      var itemCountry = String(item.country || "").toLowerCase().trim();
+      var isItemSeries = x(item);
+      var isItemAnime = cat.indexOf("anime") >= 0 ||
+                        itemGenres.indexOf("anime") >= 0 ||
+                        /jap[oó]n|japan|tokyo/i.test(itemCountry);
 
+      /* Si estamos viendo Anime: afinidad máxima hacia Anime y producciones japonesas/asiáticas */
       if (isAnime) {
-        if (cat.indexOf("anime") >= 0 || itemGenres.indexOf("anime") >= 0) {
-          score += 300;
+        if (isItemAnime) {
+          score += 600;
+        } else if (itemGenres.indexOf("animación") >= 0 || itemGenres.indexOf("animation") >= 0) {
+          score -= 100;
         } else {
-          score -= 150;
+          score -= 800;
         }
-      } else if (isMovie) {
-        if (item.kind === "pelicula" || item.type === "movie") score += 100;
-        else score -= 100;
-      } else if (isSeries) {
-        if (item.kind === "serie" || item.type === "teleplay") score += 100;
-        else score -= 100;
+      } else {
+        /* Fuera de anime, no mezclar anime si no corresponde */
+        if (isItemAnime) score -= 200;
       }
 
+      /* Coincidencia de formato: Series con Series, Películas con Películas */
+      if (isTargetSeries === isItemSeries) {
+        score += 250;
+      } else {
+        score -= 250;
+      }
+
+      /* Coincidencia de país de origen */
+      if (targetCountry && itemCountry && (targetCountry.indexOf(itemCountry) >= 0 || itemCountry.indexOf(targetCountry) >= 0)) {
+        score += 150;
+      }
+
+      /* Coincidencia de géneros temáticos (Acción, Aventura, Fantasía, etc.) */
       for (var g = 0; g < itemGenres.length; g++) {
         if (targetGenres.indexOf(itemGenres[g]) >= 0) {
-          score += 50;
+          score += 90;
         }
       }
 
+      /* Bonificación por calificación */
       var r = parseFloat(item.score) || 0;
-      score += r * 5;
+      score += r * 6;
 
       if (score > 0) {
         scored.push({ item: item, score: score });
@@ -4226,15 +4445,12 @@
 
     scored.sort(function (a, b) { return b.score - a.score; });
     var results = [];
+    var seen = {};
     for (var m = 0; m < scored.length && results.length < limit; m++) {
-      results.push(scored[m].item);
-    }
-    if (results.length < limit) {
-      for (var fb = 0; fb < catalog.length && results.length < limit; fb++) {
-        var fallbackItem = catalog[fb];
-        if (fallbackItem && fallbackItem.id !== target.id && results.indexOf(fallbackItem) === -1) {
-          results.push(fallbackItem);
-        }
+      var itm = scored[m].item;
+      if (!seen[itm.id]) {
+        seen[itm.id] = !0;
+        results.push(itm);
       }
     }
     return results;
@@ -4420,8 +4636,17 @@
                 );
                 sBtn._seasonIdx = sNum;
                 sBtn._onFocus = function () {
-                  var targetScroll = sBtn.offsetLeft - (seasonsRail.clientWidth / 2) + (sBtn.clientWidth / 2);
-                  seasonsRail.scrollLeft = Math.max(0, targetScroll);
+                  if (seasonsRail) {
+                    var cLeft = seasonsRail.scrollLeft,
+                      cWidth = seasonsRail.clientWidth,
+                      oLeft = sBtn.offsetLeft,
+                      oWidth = sBtn.offsetWidth;
+                    if (oLeft < cLeft + 40) {
+                      seasonsRail.scrollLeft = Math.max(0, oLeft - 40);
+                    } else if (oLeft + oWidth > cLeft + cWidth - 40) {
+                      seasonsRail.scrollLeft = oLeft + oWidth - cWidth + 40;
+                    }
+                  }
                 };
                 sBtn._activate = function () {
                   if (X.detailSeason !== sNum) {
@@ -4502,8 +4727,17 @@
                 r[rangeIdx].start + 1 + "-" + r[rangeIdx].end
               );
               rangeBtn._onFocus = function () {
-                var targetScroll = rangeBtn.offsetLeft - (rangesCont.clientWidth / 2) + (rangeBtn.clientWidth / 2);
-                rangesCont.scrollLeft = Math.max(0, targetScroll);
+                if (rangesCont) {
+                  var cLeft = rangesCont.scrollLeft,
+                    cWidth = rangesCont.clientWidth,
+                    oLeft = rangeBtn.offsetLeft,
+                    oWidth = rangeBtn.offsetWidth;
+                  if (oLeft < cLeft + 40) {
+                    rangesCont.scrollLeft = Math.max(0, oLeft - 40);
+                  } else if (oLeft + oWidth > cLeft + cWidth - 40) {
+                    rangesCont.scrollLeft = oLeft + oWidth - cWidth + 40;
+                  }
+                }
               };
               rangeBtn._activate = function () {
                 Sa(rangeIdx, t);
@@ -4528,11 +4762,12 @@
                   return !0;
                 }
                 if ("up" === dir) {
-                  var dBtn = le ? le.querySelector(".detail-btn") : null;
+                  var dBtn = le ? (le.querySelector(".detail-btn.is-focused") || le.querySelector(".detail-btn")) : null;
                   return dBtn ? (rt(dBtn), !0) : !0;
                 }
                 if ("down" === dir) {
-                  var ep = de ? (de.querySelector(".detail-episode.is-playing") || de.querySelector(".detail-episode")) : null;
+                  var epCont = de ? de.querySelector(".detail-episodes") : null;
+                  var ep = epCont ? (epCont.querySelector(".detail-episode.is-playing") || epCont.children[0]) : null;
                   return ep ? (rt(ep), !0) : !0;
                 }
                 return !1;
@@ -4561,8 +4796,17 @@
                 $n(t, epData);
               };
               epTile._onFocus = function () {
-                var targetScroll = epTile.offsetLeft - (u.clientWidth / 2) + (epTile.clientWidth / 2);
-                u.scrollLeft = Math.max(0, targetScroll);
+                if (u) {
+                  var cLeft = u.scrollLeft,
+                    cWidth = u.clientWidth,
+                    oLeft = epTile.offsetLeft,
+                    oWidth = epTile.offsetWidth;
+                  if (oLeft < cLeft + 40) {
+                    u.scrollLeft = Math.max(0, oLeft - 40);
+                  } else if (oLeft + oWidth > cLeft + cWidth - 40) {
+                    u.scrollLeft = oLeft + oWidth - cWidth + 40;
+                  }
+                }
               };
               epTile._onMove = function (dir) {
                 if ("left" === dir) {
@@ -4599,7 +4843,7 @@
                   if (curRange) return (rt(curRange), !0);
                   var seasonBtn = de ? (de.querySelector(".detail-season-btn.is-selected") || de.querySelector(".detail-season-btn")) : null;
                   if (seasonBtn) return (rt(seasonBtn), !0);
-                  var dBtn = le ? le.querySelector(".detail-btn") : null;
+                  var dBtn = le ? (le.querySelector(".detail-btn.is-focused") || le.querySelector(".detail-btn")) : null;
                   return dBtn ? (rt(dBtn), !0) : !0;
                 }
                 if ("down" === dir) {
@@ -4614,18 +4858,18 @@
           de.appendChild(u);
         }
         var m = e("div", "detail-related", "Quizás te guste");
-        m.style.top = n ? "154px" : "18px";
-        m.style.fontSize = n ? "28px" : "34px";
-        m.style.height = n ? "38px" : "44px";
+        m.style.top = n ? "106px" : "18px";
+        m.style.fontSize = n ? "24px" : "30px";
+        m.style.height = n ? "30px" : "38px";
         de.appendChild(m);
 
         var g = e("div", "detail-grid scrollable");
-        g.style.top = n ? "202px" : "72px";
-        g.style.height = n ? "340px" : "470px";
+        g.style.top = n ? "142px" : "64px";
+        g.style.height = n ? "280px" : "375px";
 
-        var pWidth = n ? 195 : 260;
-        var pHeight = n ? 275 : 365;
-        var cellH = n ? 324 : 415;
+        var pWidth = n ? 165 : 230;
+        var pHeight = n ? 230 : 322;
+        var cellH = n ? 270 : 365;
 
         var relList = getRelatedItems(t, l, 10);
         for (var w = 0; w < relList.length; w++) {
@@ -4637,8 +4881,17 @@
               T.style.height = cellH + "px";
               var cardPoster = xt(relItem, 0, 0, pWidth, pHeight, { gold: !0 });
               cardPoster._onFocus = function () {
-                var targetScroll = T.offsetLeft - (g.clientWidth / 2) + (pWidth / 2);
-                g.scrollLeft = Math.max(0, targetScroll);
+                if (g) {
+                  var cLeft = g.scrollLeft,
+                    cWidth = g.clientWidth,
+                    oLeft = T.offsetLeft,
+                    oWidth = T.offsetWidth;
+                  if (oLeft < cLeft + 40) {
+                    g.scrollLeft = Math.max(0, oLeft - 40);
+                  } else if (oLeft + oWidth > cLeft + cWidth - 40) {
+                    g.scrollLeft = oLeft + oWidth - cWidth + 40;
+                  }
+                }
               };
               cardPoster._onMove = function (dir) {
                 if ("up" === dir) {
@@ -4672,9 +4925,9 @@
               };
               T.appendChild(cardPoster);
               var dName = e("div", "d-name", relItem.title);
-              dName.style.top = (pHeight + 6) + "px";
-              dName.style.height = n ? "34px" : "42px";
-              dName.style.fontSize = n ? "22px" : "26px";
+              dName.style.top = (pHeight + 4) + "px";
+              dName.style.height = n ? "28px" : "34px";
+              dName.style.fontSize = n ? "19px" : "22px";
               T.appendChild(dName);
               g.appendChild(T);
             })(S, w);
@@ -5450,7 +5703,7 @@
                       ": " +
                       Ka(n[r].host) +
                       " — " +
-                      Ka(n[r].verdict || "sin datos")
+                      Ga(n[r])
                   );
                 var lg = e.liveLog || [];
                 if (lg.length) {
@@ -5967,9 +6220,9 @@
       case "ok":
         return "Correcto";
       case "dns-distinto":
-        return "DNS alterado";
+        return "Esquivado (DNS)";
       case "dns-local-falla":
-        return "Bloqueado";
+        return "Esquivado (DoH)";
       case "sin-tcp":
         return "Sin conexión";
       case "tls-falla":

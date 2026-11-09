@@ -1174,26 +1174,143 @@ for LS in luna-send luna-send-pub /usr/bin/luna-send /usr/sbin/luna-send; do
   fi
 done
 echo
-echo "=== API LOCAL HTTP (respaldo de Luna) ==="
-if command -v wget >/dev/null 2>&1; then
-  echo "--- ping ---"
-  wget -T 20 -q -O - "http://127.0.0.1:8910/ping" 2>&1 | head -c 1600
-  echo
-  echo "--- liveLog (congelamientos y errores del reproductor) ---"
-  wget -T 20 -q -O - "http://127.0.0.1:8910/liveLog?q=%7B%7D" 2>&1 | head -c 2500
-  echo
-  echo "--- home (catalogo del portal) ---"
-  wget -T 40 -q -O - "http://127.0.0.1:8910/home?q=%7B%22root%22%3A%22movies%22%7D" 2>&1 | head -c 600
-  echo
-  echo "--- liveChannels ---"
-  wget -T 40 -q -O - "http://127.0.0.1:8910/liveChannels?q=%7B%22page%22%3A1%2C%22pageSize%22%3A3%7D" 2>&1 | head -c 600
-  echo
-  echo "--- netdiag (DNS por portal, DoH vs DNS del operador) ---"
-  wget -T 120 -q -O - "http://127.0.0.1:8910/netdiag?q=%7B%7D" 2>&1 | head -c 3500
-  echo
+echo "=== API LOCAL DEL SERVICIO (datos reales de red y portal) ==="
+# Se usa Node (siempre presente en la TV) para hablar con la API local del
+# servicio; asi funciona igual en TVs sin wget.
+api_get() {
+  node -e 'var http=require("http"),fs=require("fs");var p=process.argv[1],f=process.argv[2],t=parseInt(process.argv[3],10)||20000;var r=http.get({host:"127.0.0.1",port:8910,path:p},function(res){var c=[];res.on("data",function(d){c.push(d)});res.on("end",function(){var b=Buffer.concat(c);if(f)fs.writeFileSync(f,b);else process.stdout.write(b);process.exit(0)});res.on("error",function(e){process.stdout.write("ERROR "+e.message);process.exit(1)})});r.on("error",function(e){process.stdout.write("ERROR "+e.message);process.exit(1)});r.setTimeout(t,function(){try{r.abort()}catch(e){};process.stdout.write("ERROR timeout");process.exit(1)});' "$1" "$2" "$3"
+}
+PINGF=/tmp/xuper-ping.json
+NDF=/tmp/xuper-netdiag.json
+rm -f "$PINGF" "$NDF"
+echo "--- ping del servicio (incluye semillas y errores de carga) ---"
+api_get "/ping" "$PINGF" 20000
+[ -s "$PINGF" ] && head -c 2500 "$PINGF" && echo
+echo
+echo "--- prewarm (fuerza la sesion con el portal, igual que al abrir la app) ---"
+api_get "/prewarm" "" 60000 | head -c 1000
+echo
+echo "--- prewarm FORZADO: activacion real v8/active (aqui sale el error del portal) ---"
+api_get "/prewarm?q=%7B%22force%22%3A1%7D" "" 90000 | head -c 1400
+echo
+echo "--- ping actualizado tras la activacion ---"
+api_get "/ping" "$PINGF" 20000
+[ -s "$PINGF" ] && node -e 'var fs=require("fs");try{var p=JSON.parse(fs.readFileSync("/tmp/xuper-ping.json","utf8").replace(/^\uFEFF/,""));console.log("session="+JSON.stringify(p.session||null));console.log("seeds="+JSON.stringify(p.seeds||null))}catch(e){console.log("sin ping")}' 2>&1
+echo
+echo "--- netdiag: DNS del operador vs DNS seguro (DoH), portal y sesion ---"
+echo "(puede tardar hasta 60 s; esta es la prueba que revela el bloqueo)"
+api_get "/netdiag?q=%7B%7D" "$NDF" 90000
+if [ -s "$NDF" ]; then
+cat > /tmp/xuper-netdiag-fmt.js <<'EOF'
+var fs = require("fs");
+var d = null;
+try { d = JSON.parse(fs.readFileSync("/tmp/xuper-netdiag.json", "utf8").replace(/^\uFEFF/, "")); }
+catch (e) { console.log("No se pudo leer netdiag: " + e.message); process.exit(0); }
+function line(s) { console.log(s == null ? "" : String(s)); }
+function ips(x) {
+  if (!x) return "sin datos";
+  if (x.ips && x.ips.length) return x.ips.join(",");
+  return "FALLA " + (x.error || "sin respuesta") + " (" + (x.ms || 0) + " ms)";
+}
+var VERDICT = {
+  "ok": "OK: el DNS seguro funciona y el portal responde",
+  "dns-distinto": "AVISO: el operador devuelve direcciones DISTINTAS al DNS seguro (posible secuestro DNS)",
+  "dns-local-falla": "AVISO: el DNS del operador falla, pero el DNS seguro (DoH) si resuelve",
+  "doh-bloqueado": "PROBLEMA: tampoco responde el DNS seguro ni el portal (bloqueo por IP / sin salida)",
+  "doh-sin-respuesta": "PROBLEMA: el DNS seguro no devolvio respuestas",
+  "sin-tcp": "PROBLEMA: las direcciones resueltas no aceptan conexion (bloqueo por IP)",
+  "tls-falla": "PROBLEMA: conecta pero el TLS es cortado (bloqueo DPI del operador)",
+  "algun-servidor": "AVISO: algunos servidores del portal no responden",
+  "sin-salida": "PROBLEMA: no hay salida a internet hacia los servidores",
+  "incompleto": "INCOMPLETO: la prueba no termino a tiempo"
+};
+line("version servicio : " + (d.version || "?"));
+line("modo DNS         : " + (d.mode || "?"));
+line("veredicto        : " + (d.verdict || "?") + "  ->  " + (VERDICT[d.verdict] || "sin interpretacion"));
+line("duracion         : " + (d.tookMs || 0) + " ms" + (d.partial ? "  (parcial)" : ""));
+line("IP publica TV    : " + (d.publicIp && d.publicIp.ok ? d.publicIp.ip + "  (" + (d.publicIp.ms || 0) + " ms)" : "no se pudo leer" + (d.publicIp && d.publicIp.error ? "  " + d.publicIp.error : "")));
+line("");
+line("PROVEEDORES DNS SEGURO (DoH):");
+var ps = d.providers || [], i;
+for (i = 0; i < ps.length; i++) {
+  line("  " + (ps[i].sni || ps[i].ip || "?") + "  " + (ps[i].reachable ? "ALCANZABLE" : "NO ALCANZABLE") + "  " + (ps[i].ms || 0) + " ms" + (ps[i].error ? "  " + ps[i].error : ""));
+}
+line("");
+line("HOSTS DEL PORTAL:");
+var hs = d.hosts || [];
+for (i = 0; i < hs.length; i++) {
+  var h = hs[i] || {};
+  line("  " + (h.host || "?") + "   [" + (h.verdict || "?") + "]" + (h.timeout ? "  (sin tiempo)" : ""));
+  line("     DNS del operador : " + ips(h.system));
+  line("     DNS seguro (DoH) : " + ips(h.doh) + (h.doh && h.doh.source ? "   via " + h.doh.source : ""));
+  if (h.mismatch) line("     >>> EL OPERADOR DEVUELVE IPs DISTINTAS (posible secuestro DNS)");
+  if (h.tcp443) line("     TCP 443          : " + (h.tcp443.ok ? "OK " + (h.tcp443.ms || 0) + " ms" : "FALLA " + (h.tcp443.error || "")));
+  if (h.http) line("     HTTPS            : " + (h.http.ok ? "OK status " + h.http.status + " en " + (h.http.ms || 0) + " ms" : "FALLA " + (h.http.error || "")));
+}
+line("");
+line("PORTAL / SESION / REPRODUCCION:");
+var L = d.layers || {};
+var keys = ["portal", "session", "live", "vod"], k, v;
+for (i = 0; i < keys.length; i++) {
+  k = keys[i]; v = L[k];
+  if (!v) continue;
+  line("  " + k + ": " + (v.ok ? "OK" : "FALLA") + (v.status ? " status=" + v.status : "") + (v.ms ? " " + v.ms + " ms" : "") + (v.error ? "  " + v.error : "") + (v.userId ? "  userId=" + v.userId : "") + (v.token ? "  token=" + v.token : "") + (v.ready === true ? "  ready" : ""));
+  if (v.usingSeed) line("     >>> SESION POR SEMILLA (prestada): " + (v.note || "la activacion real v8/active no funciono"));
+  if (v.lastError) line("     ultimo error de activacion: " + v.lastError);
+}
+if (d.relay) line("  relay: " + (d.relay.state || "?") + (d.relay.error ? "  " + d.relay.error : ""));
+if (d.proxyStats) line("  proxy: " + JSON.stringify(d.proxyStats));
+if (d.codec && (d.codec.h264 || d.codec.hevc || d.codec.hls)) line("  codec TV: h264=" + (d.codec.h264 || "?") + " hevc=" + (d.codec.hevc || "?") + " hls=" + (d.codec.hls || "?"));
+var p = null;
+try { p = JSON.parse(fs.readFileSync("/tmp/xuper-ping.json", "utf8").replace(/^\uFEFF/, "")); } catch (e) {}
+if (p) {
+  line("");
+  line("SESION Y SEMILLAS (ping):");
+  line("  loadErrors: " + JSON.stringify(p.loadErrors || {}));
+  line("  session   : " + JSON.stringify(p.session || null));
+  line("  semillas  : " + JSON.stringify(p.seeds || null));
+  if (p.session && p.session.usingSeed && /portal100024/.test(p.session.lastError || "")) {
+    line("  >>> ZONA BLOQUEADA POR EL PORTAL (portal100024): esta IP/region no puede activar.");
+    line("      La app solo puede entrar con una semilla nueva del pool publicado.");
+  }
+  if (p.seeds && p.seeds.lastError) line("  error al bajar semillas: " + p.seeds.lastError);
+}
+var log = d.liveLog || [];
+if (log.length) {
+  line("");
+  line("ULTIMOS EVENTOS DEL REPRODUCTOR (" + log.length + "):");
+  for (i = 0; i < log.length; i++) line("  " + JSON.stringify(log[i]).slice(0, 300));
+}
+line("");
+line("RESUMEN PARA ENVIAR:");
+var bad = [];
+if (d.verdict && d.verdict !== "ok") bad.push("RED=" + d.verdict);
+var hj = 0;
+for (i = 0; i < hs.length; i++) {
+  hj = hs[i] || {};
+  if (hj.mismatch) bad.push("DNS secuestrado en " + hj.host);
+  if (hj.verdict === "sin-tcp" || hj.verdict === "tls-falla" || hj.verdict === "sin-salida") bad.push(hj.host + ": " + hj.verdict);
+}
+for (i = 0; i < keys.length; i++) {
+  k = keys[i]; v = L[k];
+  if (v && !v.ok) bad.push(k + ": " + (v.error || "falla"));
+}
+line(bad.length ? "  " + bad.join(" | ") : "  sin problemas de red, DNS ni sesion detectados");
+EOF
+  node /tmp/xuper-netdiag-fmt.js 2>&1 | head -c 9000
 else
-  echo "sin wget en la TV"
+  echo "netdiag NO respondio: el servicio no contesta la API local o la peticion quedo colgada."
 fi
+echo
+echo "--- home (catalogo del portal; si falla aqui, el portal esta bloqueado) ---"
+api_get "/home?q=%7B%22root%22%3A%22movies%22%7D" "" 60000 | head -c 900
+echo
+echo "--- liveChannels ---"
+api_get "/liveChannels?q=%7B%22page%22%3A1%2C%22pageSize%22%3A3%7D" "" 60000 | head -c 900
+echo
+echo "--- liveLog (congelamientos y errores del reproductor) ---"
+api_get "/liveLog?q=%7B%7D" "" 20000 | head -c 3000
+echo
 echo
 echo "=== SINTAXIS DE LOS MODULOS (Node de la TV) ==="
 if [ -n "$SVC" ]; then
@@ -1217,15 +1334,23 @@ if [ -n "$SVC" ]; then
   ls -l ffmpeg 2>&1
 fi
 echo
+echo "=== ARCHIVOS TEMPORALES DEL SERVICIO ==="
+ls -l /tmp/xuper-*.json /tmp/xuper-*.log 2>/dev/null || echo "sin archivos temporales"
+echo "--- semillas muertas (bloqueo regional) ---"
+cat /tmp/xuper-seeds-dead.json 2>/dev/null | head -c 1200
+echo
+echo "--- cuenta de semillas en cache ---"
+node -e 'var fs=require("fs");try{var d=JSON.parse(fs.readFileSync("/tmp/xuper-seeds.json","utf8")),s=d.seeds||d;console.log("semillas en cache: "+s.length)}catch(e){console.log("sin cache de semillas")}' 2>&1
+echo
 echo "=== LOGS ==="
 for f in /var/log/luna-service2.log /var/log/messages /tmp/xuper-relay.log /tmp/xuper-service.log; do
   if [ -f "$f" ]; then
     echo "--- $f ---"
-    tail -n 400 "$f" 2>/dev/null | grep -i -E "xupter|fidelity|denied|unknown method|syntaxerror|no se pudo cargar|error|basic" | tail -n 40
+    tail -n 600 "$f" 2>/dev/null | grep -i -E "xupter|fidelity|magis|portal|semilla|proxy|relay|denied|unknown method|syntaxerror|no se pudo cargar|error|bloque|v8/active|snToken" | tail -n 80
   fi
 done
 echo "--- logread ---"
-logread 2>/dev/null | tail -n 400 | grep -i -E "xupter|fidelity|denied|unknown method|syntaxerror" | tail -n 40
+logread 2>/dev/null | tail -n 800 | grep -i -E "xupter|fidelity|magis|portal|semilla|proxy|relay|denied|unknown method|syntaxerror|v8/active|snToken|timeout" | tail -n 80
 echo
 echo "=== FIN ==="
 '@
@@ -1310,7 +1435,7 @@ echo ""
 echo "   >> Cerrando instancia previa si esta abierta..."
 luna-send-pub -n 1 -f luna://com.webos.applicationManager/closeByAppId "{\"id\":\"$APPID\"}" >/dev/null 2>&1
 echo "   >> La TV esta instalando el paquete..."
-rm -f "$LOG" 2>/dev/null
+rm -f "$LOG" /tmp/xuper-seeds-dead.json 2>/dev/null
 luna-send-pub -i -f luna://com.webos.appInstallService/dev/install "$(cat $JSON)" > "$LOG" 2>&1 &
 PID=$!
 

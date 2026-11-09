@@ -9,10 +9,10 @@ var crypto = require("crypto"),
   upstream = require("./upstream"),
   KEY_HEX = "e7af1ed7de1ffddd7bd3fe37ebdffde9ef3fe1ae39edfeb8",
   HOSTS = [
+    "mptec.dhkrxuzcy.com",
     "ftmrmy.jdfey0cd.com",
     "fuxok.nguvmqhpk.com",
     "eajmnp.hcgv1dt8.com",
-    "mptec.dhkrxuzcy.com",
     "hinumz.a878kkoyc.com",
     "krdwvd.swcaw7qx.com",
     "osuhk.m3x8o50te.com",
@@ -35,12 +35,16 @@ var crypto = require("crypto"),
   SEARCH_TTL = 18e4,
   SLB_TTL = 3e5,
   SEED_URL =
-    "https://raw.githubusercontent.com/xuper-plugin/kino-plugin-xuper/seeds/seeds.json",
+    "https://raw.githubusercontent.com/cristianco7/XUPER-HYDRA-PORT-WEBOS/seeds/seeds.json",
   SEED_FILE = "/tmp/xuper-seeds.json",
   SEED_DEAD_FILE = "/tmp/xuper-seeds-dead.json",
   SEED_MAX = 200,
   SEED_MIN_LIFE_MS = 3e5,
   SEED_RESCUE_ROUNDS = 3,
+  /* Con menos semillas utilizables que esto, aunque el pool sea "reciente" se
+     vuelve a descargar: el pool publicado se renueva cada 3 h y las semillas
+     caducan, así que no basta con mirar la hora de la última descarga. */
+  SEED_LOW_POOL = 10,
   SEED_POOL_FRESH_MS = 6e5,
   SEED_REFRESH_COOLDOWN_MS = 1e4,
   SEED_FAILED_COOLDOWN_MS = 3e4,
@@ -191,6 +195,9 @@ var session = {
   seed: null,
   usesSeed: !1,
   at: 0,
+  /* Último motivo por el que falló la activación real del dispositivo.
+     Se muestra en Diagnóstico para saber si el portal rechazó v8/active. */
+  lastError: "",
 };
 function resetSessionAfterLiveFailure() {
   ((session.ready = !1),
@@ -200,6 +207,7 @@ function resetSessionAfterLiveFailure() {
     (session.seed = null),
     (session.usesSeed = !1),
     (session.at = 0),
+    (session.lastError = ""),
     (liveResolveCache = {}));
 }
 var queue = [],
@@ -313,6 +321,10 @@ function post(e, r, t) {
         agent: upstream.agentFor(!a, r, a ? 80 : 443),
         path: "/api/portalCore/" + e,
         method: "POST",
+        /* El portal SIEMPRE se resuelve por DoH: nunca se usa la respuesta del
+           DNS del operador (en Argentina, Chile, etc. devuelve una IP de bloqueo
+           y la sesión/token falla con "v8/active: el portal no respondió"). */
+        preferDoh: !0,
         headers: {
           apk: APP_ID,
           apkVer: APK_VER_HEADER,
@@ -342,9 +354,9 @@ function post(e, r, t) {
                 if (!m && !i) {
                   m = !0;
                   var s,
-                    o = Buffer.concat(n).toString("utf8");
+                    raw = Buffer.concat(n).toString("utf8");
                   try {
-                    s = JSON.parse(o);
+                    s = JSON.parse(raw);
                   } catch (n) {
                     return g(
                       new Error(
@@ -363,8 +375,8 @@ function post(e, r, t) {
                           r +
                           " (TLS/SNI filtrado por el operador)"
                       ));
-                  var l = HOSTS.indexOf(r);
-                  l > 0 && (HOSTS.splice(l, 1), HOSTS.unshift(r));
+                  var pos = HOSTS.indexOf(r);
+                  pos > 0 && (HOSTS.splice(pos, 1), HOSTS.unshift(r));
                   var u =
                     void 0 === s.returnCode || null === s.returnCode
                       ? ""
@@ -373,7 +385,26 @@ function post(e, r, t) {
                     var d = new Error(
                       e + " -> " + u + " " + text(s.errorMessage)
                     );
-                    return ((d.portalCode = u), c(d));
+                    d.portalCode = u;
+                    /* Bloqueo regional (portal100024): se basa en la IP del
+                       cliente (Chile, etc.); todos los hosts del portal
+                       responderán lo mismo. Retornar de inmediato para pasar
+                       al rescate por semillas sin perder 10-15 s rotando hosts.
+                       Sesión muerta (aaa100027/aaa100028): el token expiró en
+                       la base de datos central; tampoco cambia por rotar host. */
+                    if (u === GEO_BLOCKED || SESSION_DEAD[u]) {
+                      console.log(
+                        "[magis] " +
+                          e +
+                          ": el portal respondió " +
+                          u +
+                          " (" +
+                          (u === GEO_BLOCKED ? "bloqueo regional" : "sesión muerta") +
+                          "). Rescatando de inmediato..."
+                      );
+                      return c(d);
+                    }
+                    return c(d);
                   }
                   if ("string" == typeof s.data && "" !== s.data) {
                     var f, p;
@@ -421,11 +452,26 @@ function post(e, r, t) {
       }
       function h(e) {
         if (!m && !i) {
-          ((m = !0), (l = e));
+          m = !0;
+          /* Un código de portal (bloqueo regional/sesión) explica mejor el fallo
+             que un simple error de red: se conserva como error final. */
+          if (!(l && l.portalCode)) l = e;
           try {
             v && v.abort();
           } catch (e) {}
-          if ((preferredHost === r && (preferredHost = ""), !a && s))
+          if (preferredHost === r) preferredHost = "";
+          var hIdx = HOSTS.indexOf(r);
+          if (hIdx >= 0 && HOSTS.length > 1) {
+            HOSTS.splice(hIdx, 1);
+            HOSTS.push(r);
+          }
+          /* Se descarta la IP cacheada del host que falló para que la próxima
+             resolución vuelva a preguntar por DoH y no reutilice una IP
+             envenenada por el DNS del operador. */
+          try {
+            dnsx.clearCache(r);
+          } catch (ce) {}
+          if (!a && s)
             try {
               s();
             } catch (e) {}
@@ -433,7 +479,14 @@ function post(e, r, t) {
         }
       }
       function g(e) {
-        if (((l = e), preferredHost === r && (preferredHost = ""), !a && s))
+        ((l = e));
+        if (preferredHost === r) preferredHost = "";
+        var gIdx = HOSTS.indexOf(r);
+        if (gIdx >= 0 && HOSTS.length > 1) {
+          HOSTS.splice(gIdx, 1);
+          HOSTS.push(r);
+        }
+        if (!a && s)
           try {
             s();
           } catch (e) {}
@@ -486,19 +539,32 @@ function call(e, r, t, n) {
         if (
           a &&
           ("aaa100028" === i || "aaa100027" === i || l || u) &&
-          !t._sessionRetried &&
-          !session.usesSeed
+          !t._sessionRetried
         )
           return (
             console.log(
               "[magis] sesión no iniciada (" +
                 (i || a.message) +
-                "). Renovando sesión limpia..."
+                ")." +
+                (session.usesSeed
+                  ? " La semilla prestada caducó: reintentando activación real..."
+                  : " Renovando sesión limpia...")
             ),
+            /* Si estábamos con una semilla prestada, se marca muerta antes de
+               borrar la sesión para no volver a elegirla. Después se intenta la
+               activación REAL (v8/active); solo si vuelve a fallar se pasa al
+               rescate por semillas. Esto evita quedarse atrapado quemando
+               semillas aunque la red ya funcione. */
+            SESSION_DEAD[i] &&
+              session.usesSeed &&
+              session.seed &&
+              markSeedDead(session.seed),
             (session.ready = !1),
             (session.userId = ""),
             (session.userToken = ""),
             (session.snToken = ""),
+            (session.seed = null),
+            (session.usesSeed = !1),
             (session.at = 0),
             ensureSession(function (s) {
               if (s) return n(a);
@@ -546,6 +612,7 @@ var seedPool = [],
   seedInflight = !1,
   seedWaiters = [],
   lastSeedFailure = 0,
+  lastSeedError = "",
   deadSeeds = {};
 function writeJsonSafe(e, r) {
   try {
@@ -680,7 +747,9 @@ function refreshSeeds(e) {
       }));
   }
   function n(r) {
-    ((seedInflight = !1), (lastSeedFailure = r ? Date.now() : 0));
+    ((seedInflight = !1),
+      (lastSeedFailure = r ? Date.now() : 0),
+      (lastSeedError = r ? (r.message || "error") : ""));
     var t = seedWaiters.slice();
     ((seedWaiters = []), e(r || null, !r));
     for (var n = 0; n < t.length; n++)
@@ -709,7 +778,9 @@ function adoptSeed(e) {
     (session.ready = !0),
     (session.seed = e),
     (session.usesSeed = !0),
-    (session.at = Date.now()));
+    (session.at = Date.now()),
+    session.lastError ||
+      (session.lastError = "activación real no disponible: usando semilla"));
 }
 function rescueSeed(e, r) {
   e = e || {};
@@ -724,7 +795,7 @@ function rescueSeed(e, r) {
     seedPool.length &&
     seedsAt &&
     t - seedsAt < SEED_POOL_FRESH_MS &&
-    usableSeeds().length
+    usableSeeds().length >= SEED_LOW_POOL
   ))
     return n();
   refreshSeeds(function () {
@@ -746,6 +817,10 @@ function rescueSeed(e, r) {
       s &&
         s.length &&
         ((seedPool = s),
+        /* El fallback empaquetado es viejo por definición: NO cuenta como
+           descarga reciente, para que la primera sesión intente bajar el pool
+           publicado antes de conformarse con él. */
+        (seedsAt = 0),
         console.log(
           "[magis] semillas iniciales cargadas desde fallback local: " +
             seedPool.length
@@ -755,8 +830,37 @@ function rescueSeed(e, r) {
     var a = JSON.parse(fs.readFileSync(SEED_DEAD_FILE, "utf8"));
     a && "object" == typeof a && (deadSeeds = a);
   } catch (e) {}
+  /* En segundo plano, tras arrancar el servicio y dar tiempo a Luna a
+     registrarse, se descarga el pool de semillas publicadas para tenerlo listo
+     en /tmp/xuper-seeds.json antes de que el usuario abra el catálogo. */
+  setTimeout(function () {
+    try {
+      refreshSeeds(function (err, updated) {
+        if (!err && updated) {
+          console.log(
+            "[magis] pool inicial de semillas descargado: " + seedPool.length
+          );
+        }
+      });
+    } catch (err) {}
+  }, 2000);
+
+  /* Actualización periódica en segundo plano cada 3 horas (o cada 15 min
+     si quedan pocas semillas utilizables), para que el pool nunca caduque
+     si la TV se queda encendida durante horas. */
+  var seedInterval = setInterval(function () {
+    var pool = usableSeeds();
+    var need = pool.length < SEED_LOW_POOL || (Date.now() - seedsAt > 108e5);
+    if (need) {
+      refreshSeeds(function () {});
+    }
+  }, 9e5);
+  if (seedInterval && seedInterval.unref) {
+    seedInterval.unref();
+  }
 })();
 var sessionStarting = !1,
+  sessionActTries = 0,
   sessionWaiters = [];
 function ensureSession(e) {
   e = e || function () {};
@@ -783,7 +887,7 @@ function ensureSession(e) {
       (n.gatewayMac = randomHex(6).replace(/(..)(?=.)/g, "$1:")),
       (n.wifiMac = randomHex(6).replace(/(..)(?=.)/g, "$1:")),
       call("v3/snToken", n, { baseFields: !1, urgent: !0 }, function (e, r) {
-        if (e) return e.portalCode ? a(e) : s(e);
+        if (e) return retryActivation(e, "v3/snToken");
         var t = trim(r && r.snToken);
         if (!t) return a(new Error("el portal no devolvió snToken"));
         var n = r && trim(r.sn);
@@ -810,35 +914,57 @@ function ensureSession(e) {
             },
             { baseFields: !1, urgent: !0 },
             function (e, r) {
-              return e
-                ? e.portalCode
-                  ? a(e)
-                  : (function (e) {
-                      if (e && e._retried) return a(e);
-                      (console.log(
-                        "[magis] sesión no activada por red (" +
-                          (e && e.message) +
-                          "). Reintentando una vez..."
-                      ),
-                        HOSTS.push(HOSTS.shift()),
-                        ((e || new Error("reintento"))._retried = !0),
-                        setTimeout(function () {
-                          ((sessionStarting = !1),
-                            ensureSession(function () {}));
-                        }, 400));
-                    })(e)
-                : ((session.userId = trim(r && r.userId)),
-                  (session.userToken = trim(r && r.userToken)),
-                  session.userToken
-                    ? ((session.ready = !0),
-                      (session.seed = null),
-                      (session.usesSeed = !1),
-                      (session.at = Date.now()),
-                      void s(null, session))
-                    : a(new Error("el portal no activó el dispositivo")));
+              if (e) return retryActivation(e, "v8/active");
+              sessionActTries = 0;
+              session.userId = trim(r && r.userId);
+              session.userToken = trim(r && r.userToken);
+              if (!session.userToken)
+                return a(new Error("el portal no activó el dispositivo"));
+              ((session.ready = !0),
+                (session.seed = null),
+                (session.usesSeed = !1),
+                (session.at = Date.now()),
+                (session.lastError = ""),
+                s(null, session));
             }
           ));
       }));
+  }
+  /* Reintento acotado de activación (v3/snToken y v8/active).
+     En redes con DNS secuestrado (Argentina, Chile, etc.) el portal puede
+     responder desde un host bloqueado mientras otro del pool sí entrega token.
+     Tras 2 intentos se pasa al rescate por semillas en lugar de reintentar
+     indefinidamente cada 400 ms. */
+  function retryActivation(e, label) {
+    session.lastError = label + ": " + ((e && e.message) || "sin respuesta");
+    if (e && e.portalCode) return a(e);
+    if (sessionActTries >= 2) {
+      console.log(
+        "[magis] " +
+          label +
+          " falló 2 veces por red (" +
+          (e && e.message) +
+          "). Pasando a rescate por semillas..."
+      );
+      return a(e);
+    }
+    sessionActTries++;
+    console.log(
+      "[magis] " +
+        label +
+        " no respondió por red (" +
+        (e && e.message) +
+        "). Reintentando (" +
+        sessionActTries +
+        "/2) por otro host..."
+    );
+    if (HOSTS.length > 1) HOSTS.push(HOSTS.shift());
+    try {
+      dnsx.clearCache();
+    } catch (ce) {}
+    setTimeout(function () {
+      ((sessionStarting = !1), ensureSession(function () {}));
+    }, 400);
   }
   function s(e, r) {
     sessionStarting = !1;
@@ -851,11 +977,13 @@ function ensureSession(e) {
   }
   function a(e) {
     var r = {};
+    e && (session.lastError = e.message || session.lastError);
     (session.usesSeed && session.seed && (r[seedIdentity(session.seed)] = !0),
       rescueSeed(r, function (r, t) {
         if (!t)
           return (
             console.log("[magis] sin semilla utilizable: " + (e && e.message)),
+            (sessionActTries = 0),
             s(e)
           );
         (console.log(
@@ -1276,8 +1404,8 @@ function getSlb(e) {
     return e(null, slbCache.slb);
   firstCall(
     [
-      { path: "v15/getSlbInfo", bean: slbBean() },
       { path: "v14/getSlbInfo", bean: slbBean() },
+      { path: "v15/getSlbInfo", bean: slbBean() },
     ],
     function (r, t) {
       return r
@@ -1463,6 +1591,12 @@ function subtitleList(e) {
 var PLAY_TTL = 6e4,
   playCache = {},
   playWaiters = {};
+function playRetryable(e) {
+  var m = String((e && e.message) || e || "");
+  return /no respondi[oó]|timeout|cerrada|ECONN|ETIMEDOUT|EHOSTUNREACH|ENETUNREACH|socket|no JSON|descifrar/i.test(
+    m
+  );
+}
 function loadPlay(e, r, t) {
   var n = trim(e);
   if (!n) return t(new Error("falta contentId"));
@@ -1477,9 +1611,15 @@ function loadPlay(e, r, t) {
         t[n](e, r);
       } catch (e) {}
   }
-  playWaiters[s]
-    ? playWaiters[s].push(t)
-    : ((playWaiters[s] = [t]),
+  if (playWaiters[s]) return void playWaiters[s].push(t);
+  playWaiters[s] = [t];
+  /* Un fallo de red del portal (host filtrado, timeout, conexión cerrada a
+     mitad) no debe dejar al espectador con "No se pudo resolver el título":
+     se reintenta hasta dos veces; el host que falló ya quedó al final de la
+     lista, así que el siguiente intento sale por otro host. */
+  var tries = 0,
+    attempt = function () {
+      tries++;
       ensureSession(function (e) {
         if (e) return a(e);
         call(
@@ -1494,18 +1634,24 @@ function loadPlay(e, r, t) {
           },
           { urgent: !0 },
           function (e, r) {
-            if (e) return a(e);
-            var t = r && r.episodeList && r.episodeList[0];
-            if (!t)
+            if (e) {
+              if (tries < 3 && playRetryable(e))
+                return void setTimeout(attempt, 600 * tries);
+              return a(e);
+            }
+            var t = r && r.episodeList && r.episodeList[0],
+              o = t ? collectTracks(t) : [];
+            if (!t || !o.length) {
+              if (tries < 2) return void setTimeout(attempt, 600);
               return a(new Error("el portal no devolvió pistas de vídeo"));
-            var n = collectTracks(t);
-            if (!n.length)
-              return a(new Error("el portal no devolvió pistas de vídeo"));
-            var o = { play: r, episode: t, tracks: n };
-            ((playCache[s] = { at: Date.now(), data: o }), a(null, o));
+            }
+            var i = { play: r, episode: t, tracks: o };
+            ((playCache[s] = { at: Date.now(), data: i }), a(null, i));
           }
         );
-      }));
+      });
+    };
+  attempt();
 }
 function mediaInfo(e, r, t) {
   loadPlay(e, r, function (e, r) {
@@ -2052,6 +2198,8 @@ module.exports = {
       freshAt: seedsAt,
       usingSeed: !!session.usesSeed,
       dead: r,
+      url: SEED_URL,
+      lastError: lastSeedError,
     };
   },
   constants: {

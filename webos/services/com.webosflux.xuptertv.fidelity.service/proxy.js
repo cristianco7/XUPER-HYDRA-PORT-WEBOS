@@ -40,6 +40,7 @@ var http = require("http"),
     lastStatus: 0,
     lastAt: 0,
   };
+
 function destroyConnection(e) {
   if (e) {
     if (e.up) {
@@ -249,10 +250,10 @@ function mediaRequest(e, t, r, n) {
     h = u && "80" === o.port ? 443 : o.port || d;
   (p.Host = o.host || s + (h !== d ? ":" + h : ""));
   var ag = upstream.agentFor(l, a, h);
-  /* Los segmentos de TV en vivo no usan el pool keep-alive: en Node 0.12 un
-     socket ocioso que el CDN cierra justo al reutilizarlo provoca ECONNRESET a
-     mitad del segmento y el <video> se queda congelado hasta 12 s. */
-  ag || (ag = e._noKeepAlive ? !1 : l ? httpsAgent : httpAgent);
+  /* Mantener el pool moderado de la ruta directa de 2.2.45: evita crear un
+     socket por cada segmento HLS sin almacenar segmentos ni alterar sus
+     timestamps. Los reintentos de red siguen bajo control de forward(). */
+  ag || (ag = l ? httpsAgent : httpAgent);
   return {
     secure: l,
     options: {
@@ -520,110 +521,6 @@ function forward(e, t, r, n) {
               })
             );
           }
-          if (r._segBuf && "GET" === e.method && (o.statusCode || 200) < 400) {
-            /* Segmento de TV en vivo: se descarga completo antes de entregarlo.
-               Si el CDN corta el socket a mitad (ECONNRESET), se reintenta y el
-               <video> recibe el segmento entero en vez de uno truncado que lo
-               dejaba congelado hasta que saltaba el vigilante. */
-            var sc = [],
-              sb = 0,
-              sdone = !1,
-              sstream = !1,
-              stm = null,
-              sonData,
-              sonEnd,
-              sstop = function () {
-                stm && (clearTimeout(stm), (stm = null));
-              },
-              skick = function () {
-                sstop();
-                stm = setTimeout(function () {
-                  (stats.timeouts++, (stats.lastError = "segmento sin datos"));
-                  sfail(new Error("segmento sin datos"));
-                }, 1e4);
-              },
-              sfail = function (x) {
-                if (sdone) return;
-                sdone = !0;
-                sstop();
-                try {
-                  (o.removeListener("data", sonData),
-                    o.removeListener("end", sonEnd),
-                    o.removeListener("error", sfail));
-                } catch (x) {}
-                try {
-                  o.destroy();
-                } catch (x) {}
-                if (sstream || t.headersSent) {
-                  try {
-                    t.destroy();
-                  } catch (x) {}
-                  return void p();
-                }
-                r._segTries = (r._segTries || 0) + 1;
-                /* Primero se reintenta el mismo segmento con conexión nueva;
-                   si el CDN sigue fallando se entra en la cadena de rescate
-                   (DoH, SNI camuflado, protocolo, CDN alternativa). */
-                if (r._segTries <= 2) {
-                  p();
-                  return void forward(e, t, r, n);
-                }
-                if (r._segTries <= 4) return void retryUpstream(x);
-                try {
-                  (t.writeHead(502, {
-                    "Content-Type": "text/plain",
-                    "Access-Control-Allow-Origin": "*",
-                  }),
-                    t.end("segmento incompleto"));
-                } catch (x) {}
-                p();
-              };
-            sonData = function (chunk) {
-              if (sdone) return;
-              if (sstream) return void t.write(chunk);
-              (sc.push(chunk), (sb += chunk.length));
-              if (sb > 16777216) {
-                /* Segmento enorme: se entrega en streaming para no llenar la
-                   memoria del televisor. */
-                sstream = !0;
-                try {
-                  (t.writeHead(o.statusCode || 200, d),
-                    t.write(Buffer.concat(sc, sb)));
-                } catch (x) {
-                  return void sfail(x);
-                }
-                (sc = []), (sb = 0);
-                return;
-              }
-              skick();
-            };
-            sonEnd = function () {
-              if (sdone) return;
-              sdone = !0;
-              sstop();
-              if (sstream) {
-                try {
-                  t.end();
-                } catch (x) {
-                  p();
-                }
-                return;
-              }
-              var b = Buffer.concat(sc, sb);
-              (delete d["Content-Length"], (d["Content-Length"] = b.length));
-              try {
-                (t.writeHead(o.statusCode || 200, d), t.end(b));
-              } catch (x) {
-                p();
-              }
-            };
-            return (
-              o.on("data", sonData),
-              o.on("end", sonEnd),
-              o.on("error", sfail),
-              void skick()
-            );
-          }
           (t.writeHead(o.statusCode || 200, d),
             o.on("error", function () {
               p();
@@ -853,27 +750,27 @@ function handler(e, t) {
         void t.end("expired")
       );
     var a = fromBase64Url(o[2]);
-    return /^https?:\/\//i.test(a)
-      ? void forward(
-          e,
-          t,
-          {
-            url: a,
-            headers: s.headers,
-            duration: 0,
-            backupUrls: s.backupUrls,
-            backupIndex: s.backupIndex,
-            isLive: s.isLive,
-            _segBuf: !!s.isLive,
-            _noKeepAlive: !!s.isLive,
-          },
-          o[1]
-        )
-      : (t.writeHead(400, {
+    if (!/^https?:\/\//i.test(a))
+      return (
+        t.writeHead(400, {
           "Content-Type": "text/plain",
           "Access-Control-Allow-Origin": "*",
         }),
-        void t.end("invalid hls child"));
+        void t.end("invalid hls child")
+      );
+    return void forward(
+      e,
+      t,
+      {
+        url: a,
+        headers: s.headers,
+        duration: 0,
+        backupUrls: s.backupUrls,
+        backupIndex: s.backupIndex,
+        isLive: s.isLive,
+      },
+      o[1]
+    );
   }
   var i = /^\/media\/([a-f0-9]{24})(?:\/([^\?#]*))?(?:[?#].*)?$/.exec(
     e.url || ""
@@ -897,7 +794,6 @@ function handler(e, t) {
       }),
       void t.end("expired")
     );
-  c.isLive && (c._noKeepAlive = !0),
   -1 !== c.url.indexOf(".m3u8") || -1 === u.indexOf(".m3u8")
     ? forward(e, t, c, l)
     : sendVirtualHls(e, t, l, c);
