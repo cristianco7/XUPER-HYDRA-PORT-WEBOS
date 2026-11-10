@@ -2,12 +2,12 @@
 
 # XuperTV para LG webOS
 
-**Port nativo de XuperTV 4.34.4 a televisores LG webOS 1–6** — HTML/CSS/JS sobre Chromium, catálogo real del portal, TV en vivo con categorías, reproducción con relay FFmpeg y evasión de bloqueos DNS del operador.
+**Port comunitario de XuperTV para televisores LG webOS** — aplicación HTML/CSS/JS con catálogo, TV en vivo, navegación con mando, reproducción directa y relay FFmpeg local para títulos que lo necesitan.
 
 ![webOS](https://img.shields.io/badge/webOS-1–6-a50034?style=flat-square&logo=lg&logoColor=white)
-![Chromium 53](https://img.shields.io/badge/Chromium-53-4285F4?style=flat-square&logo=googlechrome&logoColor=white)
+![compatibilidad](https://img.shields.io/badge/webOS-1.x%20a%20versiones%20modernas-4285F4?style=flat-square&logo=lg&logoColor=white)
 ![1920x1080](https://img.shields.io/badge/render-1920%C3%971080-0b7285?style=flat-square)
-![versión](https://img.shields.io/badge/IPK-2.2.44-c91923?style=flat-square)
+![versión](https://img.shields.io/badge/IPK-3.0.4-c91923?style=flat-square)
 ![licencia](https://img.shields.io/badge/c%C3%B3digo-MIT-2ea44f?style=flat-square)
 
 [Instalación](#instalación-en-el-televisor) ·
@@ -25,21 +25,19 @@
 
 ## Qué es esto
 
-Una reconstrucción del cliente **XuperTV 4.34.4** (`com.xuper.netxxus`) para
-televisores LG con webOS 4. No es un emulador ni un wrapper: la interfaz está
-reescrita en HTML/CSS/JavaScript pensada para el motor Chromium 53 del
-televisor, y un servicio Node propio habla el protocolo cifrado del portal
-Magis para traer catálogo, búsqueda, detalle, canales en vivo y URLs de
-reproducción.
+Una implementación comunitaria para televisores LG con webOS. La interfaz está
+reescrita en HTML/CSS/JavaScript para los navegadores antiguos y modernos de
+webOS, y un servicio Node local del televisor resuelve catálogo, búsqueda,
+detalle, canales en vivo y URLs de reproducción.
 
 El objetivo es que en un LG de 2019 se sienta como la app de Android TV:
 misma disposición, mismos recursos gráficos, mismo mando a distancia.
 
 | | |
 |---|---|
-| **Probado en** | webOS 1.x · 2.x · 3.x/3.5 · 4.x · 5.x · 6.x (incl. 6.5.3-47) |
+| **Compatibilidad objetivo** | webOS 1.x · 2.x · 3.x/3.5 · 4.x · 5.x · 6.x y generaciones posteriores |
 | **ID de paquete** | `com.webosflux.xuptertv.fidelity` |
-| **Versión actual** | `2.2.44` |
+| **Versión actual** | `3.0.4` |
 | **Runtime** | Chromium (web app) + servicio Node del TV |
 | **Dependencias en el TV** | ninguna: FFmpeg viaja dentro del IPK |
 
@@ -47,23 +45,28 @@ misma disposición, mismos recursos gráficos, mismo mando a distancia.
 
 | Área | Estado |
 |---|---|
-| Inicio, 7 pestañas, detalle, búsqueda, ajustes | ✅ funcionando con datos reales |
-| TV en vivo (4 000+ canales, todas las categorías del portal) | ✅ funcionando, con filtro por categoría |
-| Addons M3U (13 presets instalados automáticamente) | ✅ acceso rápido por categoría en el panel de TV |
-| Catálogo VOD (películas, series, anime, novelas) | ✅ página 2 incluida; expansión automática con addons |
+| Inicio, detalle, búsqueda, historial, favoritos y ajustes | ✅ funcionando con datos reales |
+| TV en vivo | ✅ categorías, búsqueda, favoritos y navegación con mando |
+| Addons M3U | ✅ se añaden desde el panel de TV |
+| Catálogo VOD (películas, series, anime y novelas) | ✅ filas ligeras, paginación y «Ver más» |
 | Reproductor VOD (HLS/TS/MP4) | ✅ funcionando |
 | Audio y subtítulos reales del portal | ✅ selector en el panel y en «Ajuste de reproducir» |
 | Series: temporadas y episodios | ✅ navegador tipo Netflix dentro del reproductor |
-| «Modo fluido» (relay FFmpeg local) | ✅ por título; fMP4 en webOS 4–6, MPEG-TS en webOS 1/2/3 |
-| Desync audio/vídeo en Modo Fluido | ✅ corregido con -avoid_negative_ts y resample=async=1 |
-| webOS 6 noexec mount (ffmpeg no ejecuta desde la app) | ✅ copia automática a /tmp con reintentos |
-| DNS bloqueado por la operadora | ✅ DoH multi-cloud (16 resolvers) + diagnóstico en Ajustes |
-| Portal con un host bloqueado (ej. mptec.dhkrxuzcy.com) | ✅ carrera hedged 8 hosts; el bloqueado no demora |
+| «Modo fluido» (relay FFmpeg local) | ✅ por título; entrega fMP4 en todas las versiones de webOS |
+| Audio y subtítulos | ✅ preferencia de audio por serie y selección de subtítulos |
+| DNS alterado por la operadora | ✅ DNS-over-HTTPS multi-resolvedor + diagnóstico |
+| TV en vivo con timestamps HLS absolutos | ✅ normalización y colchón de segmentos en 3.0.4 |
 | Modo desarrollador / instalación por IPK | ✅ |
 | DRM, geobloqueo, control parental del portal | ❌ fuera de alcance (no se elude nada) |
 
 Detalle fino de lo que falta en
 [`DIFERENCIAS_PENDIENTES.md`](webos/fidelity/DIFERENCIAS_PENDIENTES.md).
+
+## Versiones y pruebas
+
+- **Release estable:** descarga siempre desde [Releases](https://github.com/cristianco7/XUPER-HYDRA-PORT-WEBOS/releases). Solo las versiones con tag y archivo IPK en esa página están disponibles para actualización dentro de la TV.
+- **Build de prueba:** puede existir una versión superior en el código o en `dist/` antes de que se publique. Se prueba primero de forma manual; no se debe configurar como actualización automática hasta tener confirmación.
+- **Reporte de TV en vivo:** si un canal salta, se congela o vuelve atrás, abre **Ajustes → Diagnóstico → Ver TV en vivo** tras reproducirlo. La pantalla registra tiempo, buffer, estado del reproductor y errores del proxy sin mostrar URL, token ni cabeceras.
 
 ## Capturas
 
@@ -79,9 +82,9 @@ Detalle fino de lo que falta en
 
 - **Inicio con 7 pestañas** (TV, Destacados, Película, Series, Kids, Anime,
   Explorar) y carrusel destacado, con el catálogo real del portal.
-- **TV en vivo**: lista lateral de canales, rail de categorías, selector a
-  pantalla completa con las 38 columnas del portal y filtrado real por
-  categoría. El canal que suena no se corta al filtrar.
+- **TV en vivo**: lista de canales, categorías, búsqueda, filtro, favoritos
+  persistentes y atajo con tecla amarilla. El foco se mantiene en el canal
+  visible al aplicar una búsqueda o filtro.
 - **Detalle VOD**: sinopsis, reparto, géneros, temporadas, episodios y
   recomendaciones; el botón «Idioma» abre el mismo diálogo de audio/subtítulos
   que el reproductor.
@@ -89,8 +92,9 @@ Detalle fino de lo que falta en
   ajustes, cambio de audio por el relay y subtítulos por el proxy local.
 - **Series**: navegador de episodios a pantalla completa; elegir el episodio 6
   reproduce el episodio 6 y el detalle queda sincronizado al volver.
-- **«Modo fluido»**: por título (`seriesId || id`), por defecto **No**; una
-  película no hereda el modo de otra y una serie lo conserva entre episodios.
+- **«Modo fluido»**: por título (`seriesId || id`), por defecto **Normal**;
+  una película no hereda el modo de otra y una serie conserva la preferencia
+  entre episodios.
 - **Búsqueda** con teclado en pantalla, historial y resultados paginados.
 - **Ajustes**: cuenta local, mi lista, compartir, bloqueo, configuración global,
   ayuda y «sobre nosotros».
@@ -104,9 +108,7 @@ Detalle fino de lo que falta en
 
 Pensado para quien solo tiene el archivo y no quiere tocar una terminal:
 
-1. Consigue la carpeta `XuperTV-instalador-<versión>` (o el ZIP
-   `dist/XuperTV-instalador-<versión>.zip`, que se genera con
-   `tools/make-kit.ps1`).
+1. Descarga el ZIP de la [última release](https://github.com/cristianco7/XUPER-HYDRA-PORT-WEBOS/releases/latest), o compila tu propio kit con `tools/make-kit.ps1`.
 2. Extráela y haz **doble clic en `INSTALAR-XUPERTV.bat`**.
 3. Escribe la **IP** del televisor y la **clave** que muestra la app
    *Developer Mode* (se pide una sola vez: el instalador la comprueba con la TV
@@ -166,7 +168,7 @@ ares-device-info --device tv
 ### 2. Instalar el IPK
 
 ```bash
-ares-install --device tv dist/com.webosflux.xuptertv.fidelity_1.6.16_all.ipk
+ares-install --device tv dist/com.webosflux.xuptertv.fidelity_<versión>_all.ipk
 ares-launch  --device tv com.webosflux.xuptertv.fidelity
 ```
 
@@ -175,7 +177,7 @@ webOS 4: el `ls`/`md5` posterior al upload no responde), usa el instalador
 directo por SSH + Luna que incluye el repo:
 
 ```bash
-TV_HOST=192.168.1.50 TV_PASS=tu_clave node tools/tv_deploy.mjs dist/com.webosflux.xuptertv.fidelity_1.6.16_all.ipk
+TV_HOST=192.168.1.50 TV_PASS=tu_clave node tools/tv_deploy.mjs dist/com.webosflux.xuptertv.fidelity_<versión>_all.ipk
 ```
 
 `tv_deploy.mjs` sube el IPK por SFTP a `/media/developer/temp/` y llama a
@@ -213,16 +215,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-ipk.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File tools/setup-ffmpeg.ps1 2>/dev/null || \
   tar -xJf tools/vendor/ffmpeg-7.0.2-armhf-static.tar.xz -C /tmp
 ares-package webos/fidelity webos/services/com.webosflux.xuptertv.fidelity.service -o dist -e shots -e '*.md'
-python3 tools/fix_ipk_modes.py dist/com.webosflux.xuptertv.fidelity_1.6.16_all.ipk
+python3 tools/fix_ipk_modes.py dist/com.webosflux.xuptertv.fidelity_<versión>_all.ipk
 ```
 
-Salida de referencia (build 1.6.16):
+Salida de referencia: el número y el hash cambian en cada compilación.
 
 | Dato | Valor |
 |---|---|
-| Archivo | `dist/com.webosflux.xuptertv.fidelity_1.6.16_all.ipk` |
-| Tamaño | 22 469 306 bytes (21,4 MiB) |
-| SHA-256 | `174DC8E9DB58D760EB704BFC13D26BEF7A8663D009746B9F56445C38910D957D` |
+| Archivo | `dist/com.webosflux.xuptertv.fidelity_<versión>_all.ipk` |
+| Tamaño | ~22 MiB |
+| SHA-256 | mostrado al final de `tools/build-ipk.ps1` |
 
 El IPK incluye la web app, el servicio Luna, `ffmpeg` (31,8 MB) y
 `ffmpeg-LICENSE.txt`. Por eso pesa ~22 MB: es una instalación de un solo paso,
@@ -231,9 +233,9 @@ sin descargas en el televisor.
 ## Arquitectura
 
 ```
-┌──────────────────────────── televisor LG (webOS 4) ────────────────────────────┐
+┌──────────────────────────── televisor LG (webOS) ──────────────────────────────┐
 │                                                                                │
-│  com.webosflux.xuptertv.fidelity            (web app · Chromium 53)            │
+│  com.webosflux.xuptertv.fidelity            (web app · navegador webOS)         │
 │  ├─ index.html + css/style.css              pantallas y foco D-pad             │
 │  ├─ js/app.js                               navegación, panel, reproductor     │
 │  ├─ data/portal.js                          snapshot del catálogo (pinta ya)   │
@@ -318,14 +320,16 @@ los entrecorta. El «Modo fluido» arranca un FFmpeg local que copia los streams
 (`-c copy`) a un fMP4 con etiqueta `hvc1` y lo sirve en
 `http://127.0.0.1:8787/s/<token>.mp4`.
 
-- Se elige **por título**: `smoothModeByTitle[seriesId || id]`, por defecto
-  **No**. Una película no hereda el ajuste de otra y una serie lo mantiene
-  entre episodios.
-- Solo se activa para HEVC/TS; el resto usa el proxy directo.
+- Se elige **por título**: una película no hereda el ajuste de otra y una
+  serie lo mantiene entre episodios.
+- El modo Normal usa el proxy directo. El modo Fluido resuelve una URL local
+  del relay y entrega **MP4 fragmentado** en todas las versiones de webOS.
 - El audio se cambia a través del relay (`&a=<índice>`) porque el pipeline
   nativo no permite cambiar de pista en caliente.
-- Si FFmpeg no está o no es ejecutable, el modo fluido falla y se ve el aviso
-  de stream; revisa el paso 3 de la instalación.
+- Si el relay no llega a estado reproducible en 15 segundos, la app vuelve una
+  vez a Normal para evitar una pantalla negra.
+- Si FFmpeg no está o no es ejecutable, reinstala el IPK y revisa el paso 3 de
+  la instalación.
 
 Contrato que **no se debe romper** al tocar la app (está descrito en
 [`AGENTS.md`](AGENTS.md)): Normal usa el proxy directo; Modo Fluido usa
@@ -340,15 +344,12 @@ una VPN ni un bloqueo de puerto, es la respuesta DNS.
 
 El servicio incluye `dnsx.js`, un resolutor **DNS-over-HTTPS**:
 
-- Pregunta a Cloudflare (`1.1.1.1`, `1.0.0.1`), Google (`8.8.8.8`,
-  `8.8.4.4`) y AdGuard (`94.140.14.14`, `94.140.15.15`) **por IP**, con el
-  `Host`/SNI correcto, así que el DNS de la operadora nunca participa.
-- Se consultan los seis a la vez y gana el primero que responde; si ninguno
-  responde en 5 s se usa el DNS del televisor (el comportamiento anterior) y
-  se deja de insistir durante 5 minutos.
-- El resultado se guarda en caché 10 minutos y se usa para el portal, las
-  semillas y el proxy de vídeo (`lookup` en las peticiones HTTP/HTTPS), que
-  sigue enviando el nombre real para SNI y `Host`.
+- Consulta varios proveedores independientes de DoH por HTTPS y utiliza una
+  dirección IPv4 resuelta antes de abrir la conexión al portal o CDN. La
+  petición conserva el `Host` y el SNI correspondiente al servidor.
+- El resultado se conserva en caché y el proxy puede renovar la resolución o
+  probar el respaldo de CDN ante un error real de conexión. No almacena enlaces
+  de reproducción ni credenciales en disco.
 
 En **Ajustes → Diagnóstico** la app muestra, por cada dominio, lo que dice el
 DNS del televisor, lo que dice el DNS seguro, y si la conexión TCP/HTTPS
@@ -412,10 +413,10 @@ webosflux/
 | `Bad configuration option: pubkeyacceptedalgorithms` al instalar | Windows 10 20H2 trae OpenSSH 8.1 (solo entiende `PubkeyAcceptedKeyTypes`) y se estaba usando un `instalar-tv.ps1` viejo. El instalador actual detecta el nombre válido con `ssh -G`; extrae el ZIP completo en una carpeta limpia. |
 | La interfaz se ve recortada en TV 720p, 2K o 4K | La app escala el lienzo de 1920×1080 al viewport real y, si el panel es menor que la ventana, se ajusta al panel. Revisa **Ajustes → Imagen → Relación de aspecto → Solo escaneo**. Para un modelo concreto, envía una foto de **Ajustes → Diagnóstico** (incluye `Pantalla · panel · escala`). |
 | «No se pudo abrir el stream» en todos los canales | El servicio no está corriendo o el portal no responde. Comprueba `node tools/tv_luna.mjs luna://com.webosflux.xuptertv.fidelity.service/ping`. |
-| «No se pudo abrir el stream (código 4)» en un país con bloqueos | Abre **Ajustes → Diagnóstico**: si algún dominio dice *DNS alterado*, la operadora envenena el DNS y la app ya usa el DNS seguro. Reinstala la versión 1.6.16 o superior si ese menú no existe. |
+| «No se pudo abrir el stream (código 4)» en un país con bloqueos | Abre **Ajustes → Diagnóstico**. Si un dominio figura como *DNS alterado*, la app intentará resolverlo por DNS seguro; envía el reporte antes de cambiar ajustes de red. |
 | El Modo fluido no arranca | `ffmpeg` sin permiso de ejecución (paso 3) o relay ocupado; mira los logs del servicio. |
 | Pantalla en negro al abrir la app | IPK antiguo o instalación a medias: reinstala la versión actual y lanza con `ares-launch`. |
-| Los canales no filtran / no se puede ir a las categorías | Versión < 1.5.9. En 1.5.9 el rail conserva el foco y **Arriba** abre el selector de las 38 categorías. |
+| Los canales no filtran / no se puede ir a categorías o favoritos | Actualiza a la última release y abre de nuevo la sección TV. Si persiste, adjunta una foto de Diagnóstico y el modelo/versión de webOS. |
 | «Unexpected token» en el servicio | Algún JSON se guardó con BOM; el Node del televisor no lo tolera. Guarda sin BOM. |
 | El TV no aparece en `ares-device-info` | Modo desarrollador caducado (hay que renovarlo cada 50 h) o IP cambiada. |
 

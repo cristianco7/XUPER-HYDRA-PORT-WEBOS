@@ -1,26 +1,6 @@
 #!/usr/bin/env node
 "use strict";
 
-/*
- * Minter de semillas para XuperTV.
- *
- * El portal Magis bloquea por región (portal100024) a muchos países: ahí la
- * activación real v8/active NUNCA funciona y la app solo puede entrar con una
- * sesión anónima prestada ("semilla"). Las semillas caducan, así que alguien
- * con una IP no bloqueada tiene que ir acuñando sesiones nuevas y publicarlas.
- *
- * Este script hace exactamente eso: acuña sesiones anónimas nuevas, comprueba
- * con el catálogo real que funcionan (una sesión bloqueada o muerta no se
- * publica) y las mezcla con el pool anterior en un JSON que la app descarga.
- *
- * Uso:
- *   node tools/mint-seeds.js [--count 30] [--pool <archivo>] [--out <archivo>]
- *                            [--max 200] [--ttl-hours 12]
- *
- * Sin --pool/--out, el pool vive en dist/seeds/seeds.json.
- * El script es Node moderno (lo corre GitHub Actions), no va dentro del IPK.
- */
-
 var fs = require("fs");
 var path = require("path");
 
