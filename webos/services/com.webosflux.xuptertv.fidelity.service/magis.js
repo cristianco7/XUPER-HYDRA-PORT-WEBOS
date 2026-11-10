@@ -1046,8 +1046,38 @@ var treeCache = {},
   itemCache = {},
   searchCache = {},
   slbCache = null;
+function pruneCache(cache, maxEntries, ttlMs) {
+  if (!cache) return;
+  var now = Date.now();
+  var keys = Object.keys(cache);
+  var valid = [];
+  var i, k, entry, atVal;
+  for (i = 0; i < keys.length; i++) {
+    k = keys[i];
+    entry = cache[k];
+    atVal = (entry && typeof entry === "object" && entry.at) ? entry.at : (entry && entry._at ? entry._at : 0);
+    if (ttlMs && atVal && (now - atVal > ttlMs)) {
+      delete cache[k];
+    } else {
+      valid.push({ key: k, at: atVal });
+    }
+  }
+  if (maxEntries && valid.length > maxEntries) {
+    valid.sort(function (a, b) {
+      return a.at - b.at;
+    });
+    var toDelete = valid.length - maxEntries;
+    for (i = 0; i < toDelete; i++) {
+      delete cache[valid[i].key];
+    }
+  }
+}
 function remember(e) {
-  e && e.id && (itemCache[e.id] = e);
+  if (e && e.id) {
+    if (!e._at) e._at = Date.now();
+    itemCache[e.id] = e;
+    pruneCache(itemCache, 300, 0);
+  }
 }
 function itemsFromTree(e, r) {
   var t = e && e.recommendList,
@@ -1090,6 +1120,7 @@ function home(e, r, t) {
         var o = itemsFromTree(a, e);
         enrichCatalog(e, o, function (enriched) {
           ((treeCache[n] = { at: Date.now(), items: enriched }),
+            pruneCache(treeCache, 12, TREE_TTL),
             t(null, { root: e, pageNum: r, items: enriched, cached: !1 }));
         });
       }
@@ -1230,6 +1261,7 @@ function search(e, r, t) {
               }
           }
         ((searchCache[cacheKey] = { at: Date.now(), items: a }),
+          pruneCache(searchCache, 16, SEARCH_TTL),
           t(null, { items: a, total: rResp && rResp.totalSize, cached: !1 }));
       }
     );
@@ -1646,7 +1678,9 @@ function loadPlay(e, r, t) {
               return a(new Error("el portal no devolvió pistas de vídeo"));
             }
             var i = { play: r, episode: t, tracks: o };
-            ((playCache[s] = { at: Date.now(), data: i }), a(null, i));
+            ((playCache[s] = { at: Date.now(), data: i }),
+              pruneCache(playCache, 12, PLAY_TTL),
+              a(null, i));
           }
         );
       });
@@ -1900,6 +1934,7 @@ function getLiveChannels(e, r, t, n) {
                   channel: d,
                 }));
             }
+            pruneCache(liveChannelCache, 600, 0);
           }
           n(null, a, s.length >= t);
         }
@@ -2008,6 +2043,7 @@ function fetchM3u(e, r) {
           t.on("end", function () {
             var parsed = parseM3u(Buffer.concat(n).toString("utf8"));
             m3uCache[e] = { at: Date.now(), data: parsed };
+            pruneCache(m3uCache, 3, M3U_CACHE_TTL);
             r(null, parsed);
           }));
       });
@@ -2163,7 +2199,9 @@ function resolveLive(e, r, force) {
                   e
               ),
             };
-            ((liveResolveCache[e] = { at: Date.now(), stream: v }), r(null, v));
+            ((liveResolveCache[e] = { at: Date.now(), stream: v }),
+              pruneCache(liveResolveCache, 40, LIVE_RESOLVE_CACHE_MS),
+              r(null, v));
           })(l);
         });
       })();

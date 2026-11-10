@@ -1,9 +1,9 @@
 {
-  "version": "3.0.4",
+  "version": "3.0.7",
   "name": "XuperTV",
   "minWebos": "1.0.0",
-  "ipkUrl": "https://github.com/cristianco7/XUPER-HYDRA-PORT-WEBOS/releases/download/v3.0.4/com.webosflux.xuptertv.fidelity_3.0.4_all.ipk",
-  "sha256": "EF57F27F5C67E48E96B0FE3C15F72DA0547F5AFD528D6F9F3C164982F045578F",
-  "changelog": "Versión 3.0.4: buffer de seguridad HLS de 15 segundos para canales 24/7. El proxy entrega un colchón de 3 segmentos que absorbe los desfases de fotogramas del transcodificador, eliminando los micro-saltos de escena.",
-  "releaseDate": "2026-11-09"
+  "ipkUrl": "https://github.com/cristianco7/XUPER-HYDRA-PORT-WEBOS/releases/download/v3.0.7/com.webosflux.xuptertv.fidelity_3.0.7_all.ipk",
+  "sha256": "36B6557844DFB93D5FB0CDA7CD27543DE9EBD70B277D9DEF9847E961102B3707",
+  "changelog": "Versión 3.0.7: Nuevo selector de Calidad en 'Ajuste de reproducir' (Automática y las resoluciones disponibles: 4K, 1080p, 720p, etc.). La calidad elegida se recuerda y se aplica al cambiar de capítulo o título; en Modo Fluido reinicia el relay en la misma posición con la nueva calidad. Se mantiene el respaldo automático a otra copia compatible si falla. Versión 3.0.6: Ajuste de reproducir ya no corta las opciones; subtítulos sin caja negra fija con Fondo (Contorno negro, Sin fondo, Caja negra) y Color real (blanco, amarillo, cian, lima). Versión 3.0.5: Magic Remote, diálogo de Addons, búsqueda inteligente, Modo Fluido fiable, categoría 'DirecTV / ESPN', foco en vista previa de series y subtítulos recordados.",
+  "releaseDate": "2026-11-10"
 }

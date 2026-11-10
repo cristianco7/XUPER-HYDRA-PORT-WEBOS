@@ -1,6 +1,6 @@
 !(function () {
   "use strict";
-  var APP_VERSION = "3.0.4";
+  var APP_VERSION = "3.0.7";
   function e(e, t, a) {
     var i = document.createElement(e);
     return (t && (i.className = t), null != a && (i.textContent = a), i);
@@ -26,8 +26,30 @@
   }
   function n(e, t) {
     for (; e && e !== document;) {
-      if (1 === e.nodeType && e.matches && e.matches(t)) return e;
+      if (1 === e.nodeType) {
+        var m = e.matches || e.webkitMatchesSelector || e.mozMatchesSelector || e.msMatchesSelector;
+        if (m && m.call(e, t)) return e;
+      }
       e = e.parentNode;
+    }
+    return null;
+  }
+  function findScrollable(elem, horizontal) {
+    while (elem && elem !== document && elem !== document.body) {
+      if (1 === elem.nodeType) {
+        if (horizontal) {
+          if (elem.scrollWidth > elem.clientWidth + 4) {
+            var sx = window.getComputedStyle ? window.getComputedStyle(elem).overflowX : "";
+            if (sx === "auto" || sx === "scroll" || elem.classList.contains("catalog-rail") || elem.classList.contains("scrollable") || elem.classList.contains("search-suggestions")) return elem;
+          }
+        } else {
+          if (elem.scrollHeight > elem.clientHeight + 4) {
+            var sy = window.getComputedStyle ? window.getComputedStyle(elem).overflowY : "";
+            if (sy === "auto" || sy === "scroll" || elem.classList.contains("scrollable") || elem.classList.contains("search-results") || elem.classList.contains("da-body") || elem.classList.contains("pc-list") || elem.classList.contains("settings-body") || elem.classList.contains("pe-seasons") || elem.classList.contains("pe-episodes")) return elem;
+          }
+        }
+      }
+      elem = elem.parentNode;
     }
     return null;
   }
@@ -866,6 +888,7 @@
           X.detail === e &&
             "detail" === X.screen &&
             (Ca(e),
+            restoreDetailFocus(),
             l || (xe && xe.src && !xe.paused) || Jr(e, X.detailEpisode));
         })
       );
@@ -885,6 +908,7 @@
                 X.detail === e &&
                   "detail" === X.screen &&
                   (Ca(e),
+                  restoreDetailFocus(),
                   (xe && xe.src && !xe.paused) || Jr(e, X.detailEpisode)));
             }
             t(e);
@@ -1046,7 +1070,9 @@
         subLang: 0,
         size: 0,
         style: 0,
-        subtitle: !0,
+        subtitle: !1,
+        subtitleBg: "outline",
+        quality: "auto",
       },
       crOn: !1,
       favs: {},
@@ -1126,6 +1152,16 @@
         X.playback.hasOwnProperty(t) &&
           void 0 !== e[t] &&
           (X.playback[t] = e[t]);
+    /* Migración: las versiones anteriores guardaban subtitle=true por defecto.
+       Se apaga una sola vez al actualizar. Después de esto, si el espectador
+       activa los subtítulos, su elección se conserva hasta que los desactive. */
+    try {
+      if (!localStorage.getItem("xuper_subtitle_pref_v2")) {
+        X.playback.subtitle = !1;
+        localStorage.setItem("xuper_subtitle_pref_v2", "1");
+        K(G, X.playback);
+      }
+    } catch (e) {}
     var a = J($, null);
     (a && a.id
       ? ((Q = a).history && Q.history.length) || (Q.history = [])
@@ -1203,6 +1239,7 @@
     if (!e) return !1;
     if (e.offsetWidth < 1 || e.offsetHeight < 1) return !1;
     if (null === e.offsetParent) return !1;
+    if (Ht) return !!n(e, "#dialog-addons");
     if (X.episodeBrowserOpen) return !!n(e, "#player-episodes");
     if (X.categoryPickerOpen) return !!n(e, "#player-categories");
     if (catalogFilterDialog) return !!n(e, ".catalog-filter-dialog");
@@ -1226,7 +1263,8 @@
   }
   function it() {
     var root = null;
-    if (catalogFilterDialog) root = catalogFilterDialog;
+    if (Ht) root = t("dialog-addons");
+    else if (catalogFilterDialog) root = catalogFilterDialog;
     else if (liveFavoritePrompt) root = liveFavoritePrompt;
     else if (ji) root = t("dialog-playsettings");
     else if (Ut) root = t("dialog-update");
@@ -1295,7 +1333,7 @@
           var s = t("screen-home");
           s && s.classList.toggle("is-rail-open", !!r);
         }
-        (a || nt(e), wt());
+        (a || nt(e), "player" !== X.screen && wt());
       } else a || nt(e);
   }
   function ot(e) {
@@ -1305,6 +1343,14 @@
   }
   function st(e) {
     if (X.focus) {
+      if (!at(X.focus)) {
+        var screenElem = t("screen-" + X.screen) || document;
+        var fallback = ot(screenElem);
+        if (fallback) {
+          rt(fallback);
+          return;
+        }
+      }
       if (!X.focus._onMove || !X.focus._onMove(e)) {
         for (
           var t = "home" === X.screen && n(X.focus, ".home-page"),
@@ -1456,13 +1502,17 @@
                               })());
           if ("detail" !== X.screen) {
             if ("section" === X.screen) return void closeSection();
-            if ("search" === X.screen)
-              return (
-                Da(),
-                lt("home"),
-                bt(X.tab, !1),
-                void (Ue[X.tab] && rt(Ue[X.tab]))
-              );
+            if ("search" === X.screen) {
+              try { if (me && me.blur) me.blur(); } catch (err) {}
+              try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch (err) {}
+              Da();
+              lt("home");
+              var destTab = (typeof X.tab === "number" && X.tab >= 0) ? X.tab : 0;
+              bt(destTab, !1);
+              var homeTarget = (Ue && Ue[destTab]) || (Ue && Ue[0]) || ot(t("screen-home"));
+              if (homeTarget) rt(homeTarget);
+              return;
+            }
             if ("settings" === X.screen)
               return (
                 lt("home"),
@@ -1500,7 +1550,12 @@
             var r = X.detailReturn;
             if (r && "search" === r.screen) {
               lt("search");
-              rt(r.focus);
+              if (r.focus && at(r.focus)) {
+                rt(r.focus);
+              } else {
+                var searchTarget = ot(he) || (t("search-suggestions") && ot(t("search-suggestions"))) || (Be && Be[0]) || me;
+                if (searchTarget) rt(searchTarget);
+              }
             } else if (r && "section" === r.screen) {
               lt("section");
               rt(r.focus);
@@ -1552,6 +1607,39 @@
       i = !0;
     if ("welcome" === X.screen)
       return (vt(), void (e.preventDefault && e.preventDefault()));
+    if ("search" === X.screen && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      if (8 === t || "Backspace" === a) {
+        if (X.searchQuery && X.searchQuery.length > 0) {
+          Aa(X.searchQuery.slice(0, -1));
+          return void (e.preventDefault && e.preventDefault());
+        }
+      } else if (a && a.length === 1 && t !== 13 && t !== 32) {
+        Aa(X.searchQuery + a);
+        return void (e.preventDefault && e.preventDefault());
+      } else if (32 === t && (X.focus === me || document.activeElement === me)) {
+        Aa(X.searchQuery + " ");
+        return void (e.preventDefault && e.preventDefault());
+      } else if (t >= 48 && t <= 57 && !a) {
+        Aa(X.searchQuery + String.fromCharCode(t));
+        return void (e.preventDefault && e.preventDefault());
+      } else if (t >= 65 && t <= 90 && !a) {
+        Aa(X.searchQuery + String.fromCharCode(t));
+        return void (e.preventDefault && e.preventDefault());
+      }
+    }
+    if ("search" === X.screen && (461 === t || 27 === t || "Back" === a || "GoBack" === a || "Escape" === a)) {
+      if (document.activeElement === me || X.focus === me) {
+        try { if (me && me.blur) me.blur(); } catch (err) {}
+        try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch (err) {}
+        var firstResult = ot(he);
+        var firstSug = t("search-suggestions") ? ot(t("search-suggestions")) : null;
+        var nextTarget = firstResult || firstSug || (Be && Be[0]);
+        if (nextTarget) {
+          rt(nextTarget);
+          return void (e.preventDefault && e.preventDefault());
+        }
+      }
+    }
     if (
       461 === t ||
       27 === t ||
@@ -1560,7 +1648,12 @@
       "GoBack" === a ||
       "Escape" === a
     )
-      return X.categoryPickerOpen
+      return Ht
+        ? ((dt = Date.now()),
+          la(),
+          e.preventDefault && e.preventDefault(),
+          void (e.stopPropagation && e.stopPropagation()))
+        : X.categoryPickerOpen
         ? (ur(),
           e.preventDefault && e.preventDefault(),
           void (e.stopPropagation && e.stopPropagation()))
@@ -1581,12 +1674,7 @@
               zt || ea(),
               e.preventDefault && e.preventDefault(),
               void (e.stopPropagation && e.stopPropagation()))
-            : Ht
-              ? ((dt = Date.now()),
-                la(),
-                e.preventDefault && e.preventDefault(),
-                void (e.stopPropagation && e.stopPropagation()))
-              : ji
+            : ji
                 ? ((dt = Date.now()),
                   tr(),
                   e.preventDefault && e.preventDefault(),
@@ -1599,6 +1687,21 @@
                   : (ct(),
                     e.preventDefault && e.preventDefault(),
                     void (e.stopPropagation && e.stopPropagation()));
+    if (Ht)
+      return (
+        37 === t
+          ? st("left")
+          : 38 === t
+            ? st("up")
+            : 39 === t
+              ? st("right")
+              : 40 === t
+                ? st("down")
+                : 13 === t || 32 === t
+                  ? pt()
+                  : (i = !1),
+        void (i && e.preventDefault && e.preventDefault())
+      );
     if (X.categoryPickerOpen)
       return (
         37 === t
@@ -2243,7 +2346,8 @@
         t.appendChild(r);
       },
     ],
-    ht = {};
+    ht = {},
+    homeClockTimer = null;
   function mt(e) {
     !ht[e] && He[e] && ft[e] && ((ht[e] = !0), ft[e](He[e]));
   }
@@ -2391,7 +2495,11 @@
           '<svg viewBox="0 0 30 22"><path d="M15 19.5a2.1 2.1 0 1 1 0-4.2 2.1 2.1 0 0 1 0 4.2z" fill="currentColor"/><path d="M8.4 12.2a9.6 9.6 0 0 1 13.2 0" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M4.2 7.6a15.6 15.6 0 0 1 21.6 0" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>'),
           te.appendChild(l));
         var d = e("div", "notify-time");
-        ((d.id = "notify-time"), te.appendChild(d), yt(), setInterval(yt, 3e4));
+        d.id = "notify-time";
+        te.appendChild(d);
+        yt();
+        if (homeClockTimer) clearInterval(homeClockTimer);
+        homeClockTimer = setInterval(yt, 3e4);
       })());
   }
   function yt() {
@@ -2452,6 +2560,11 @@
       (Ct = setTimeout(function () {
         ((Ct = null),
           (function () {
+            /* Las carátulas sólo existen fuera del reproductor. Al pulsar
+               arriba en Modo Fluido, este recorrido cargaba/descargaba todas
+               las imágenes de pantallas ocultas y podía saturar la memoria de
+               TVs lentas (pantalla negra + cierre de la app). */
+            if ("player" === X.screen) return;
             var root = null;
             if ("home" === X.screen) {
               root = document.querySelector(".home-page.is-current");
@@ -2462,7 +2575,7 @@
             } else if ("section" === X.screen) {
               root = t("screen-section");
             } else {
-              root = document;
+              root = document.querySelector(".screen.is-active") || document;
             }
             if (!root) return;
             var e = root.querySelectorAll("img[data-poster-src]"),
@@ -2613,6 +2726,15 @@
       desc: "Fútbol, baloncesto, automovilismo y eventos deportivos",
     },
     {
+      id: "directv_espn",
+      name: "DirecTV Sports y ESPN",
+      url: "https://iptv-org.github.io/iptv/categories/sports.m3u?xuper=directv-espn",
+      desc: "DSports (DirecTV Sports), ESPN, ESPN 2, ESPN 3 y señales deportivas de Latinoamérica",
+      /* De la lista pública de deportes se conservan únicamente las señales
+         DirecTV/DSports y ESPN, para que el addon muestre solo esos canales. */
+      filter: "ESPN|DSports|DirecTV",
+    },
+    {
       id: "animation_iptv",
       name: "Animación y Caricaturas 24/7",
       url: "https://iptv-org.github.io/iptv/categories/animation.m3u",
@@ -2631,6 +2753,26 @@
       desc: "Canales musicales, conciertos en vivo, pop, rock, urbano y latino",
     },
   ];
+  /* Un addon puede traer una lista pública grande (p.ej. todos los deportes)
+     y quedarse sólo con las señales que interesan. El filtro se guarda junto
+     al addon para que se aplique también al recargar los canales. */
+  function addonFilterChannels(addon, list) {
+    if (!addon || !addon.filter || !list || !list.length) return list || [];
+    var re = null;
+    try {
+      re = new RegExp(addon.filter, "i");
+    } catch (e) {
+      re = null;
+    }
+    if (!re) return list;
+    var out = [];
+    for (var i = 0; i < list.length; i++) {
+      var ch = list[i];
+      if (ch && re.test(String(ch.name || "") + " " + String(ch.group || "")))
+        out.push(ch);
+    }
+    return out;
+  }
   function _t() {
     var stored = null;
     try {
@@ -2652,6 +2794,18 @@
           updated.push(Tt[p]);
           map[Tt[p].id] = !0;
           added = !0;
+        } else if (Tt[p].channels && Tt[p].channels.length) {
+          /* Los presets curados se refrescan: versiones viejas guardaron el
+             addon DirecTV/ESPN con una URL pública cuyos canales estaban caídos. */
+          for (var q = 0; q < updated.length; q++) {
+            if (updated[q] && updated[q].id === Tt[p].id) {
+              if (!updated[q].channels || !updated[q].channels.length) {
+                updated[q] = Tt[p];
+                added = !0;
+              }
+              break;
+            }
+          }
         }
       }
       if (added) {
@@ -2672,9 +2826,20 @@
       localStorage.setItem("xuper_m3u_addons", JSON.stringify(e || []));
     } catch (e) {}
   }
+  /* Categoría propia de TV en vivo con las señales DirecTV/DSports y ESPN.
+     No depende de instalar el addon: al elegirla se descarga la lista pública
+     de deportes y se filtra a esas señales. */
+  var DIRECTV_ESPN_CATEGORY = {
+    id: "directv_espn_live",
+    name: "DirecTV / ESPN",
+    addonUrl:
+      "https://iptv-org.github.io/iptv/categories/sports.m3u?xuper=directv-espn-live",
+    filter: "ESPN|DSports|DirecTV",
+  };
   var DEFAULT_LIVE_CATEGORIES = [
     { id: 76182, name: 'Todos', code: 'ba397e42-b664-11ed-8c55-768dd7bc60d3' },
     { id: 76206, name: 'Deportes', code: 'dc520f12-b664-11ed-8b54-768dd7bc60d3' },
+    DIRECTV_ESPN_CATEGORY,
     { id: 87034, name: 'Vivo gratis', code: '77EA75EF523AB44B01D707781892485E' },
     { id: 76205, name: 'Cine y Series', code: 'db7b71dc-b664-11ed-8b54-768dd7bc60d3' },
     { id: 77970, name: 'Más popular', code: '78C5EC9959371B7FEFE6E14AF48A1904' },
@@ -2884,38 +3049,63 @@
       syncLiveFavoriteButtons();
       dr();
       updatePlayerCatBadge();
-      if (e.isAddon) {
+      if (e.addonUrl) {
+        loadAddonCategory(e, function () { t && t(); });
+      } else if (e.isAddon) {
         $t(function () { t && t(); });
       } else {
         Gt(e.id, function () { t && t(); }, !0);
       }
     }
   }
+  function loadM3uChannels(addons, done) {
+    if (!addons || !addons.length) return done && done([]);
+    for (var out = [], total = addons.length, i = 0; i < addons.length; i++)
+      (function (addon) {
+        P("fetchM3u", { url: addon.url }, function (err, res) {
+          var chans =
+            res && res.channels ? addonFilterChannels(addon, res.channels) : [];
+          for (var k = 0; k < chans.length; k++) out.push(chans[k]);
+          if (--total <= 0) done && done(out);
+        });
+      })(addons[i]);
+  }
+  function showLoadedChannels(list, done) {
+    (jr(""), F.splice(0, F.length));
+    for (var o = 0; o < list.length; o++)
+      ((list[o].index = o + 1), F.push(list[o]));
+    ((X.channel = 0),
+      Qt(liveFavoritesOnly),
+      hr(),
+      F[0] && ae && (ae.textContent = F[0].name),
+      "player" === X.screen &&
+        "live" === X.playerMode &&
+        (ao(), to(F[0], !0)),
+      done && done());
+  }
+  function loadAddonCategory(cat, done) {
+    jr("Cargando canales de " + (cat.name || "Addon") + "…");
+    loadM3uChannels([{ url: cat.addonUrl, filter: cat.filter }], function (list) {
+      if (!list || !list.length) {
+        (jr(""),
+          Yt(
+            "No hay señales disponibles en " +
+              (cat.name || "esta categoría") +
+              " en este momento."
+          ));
+        return (F.splice(0, F.length), Qt(liveFavoritesOnly), hr(), void (done && done()));
+      }
+      showLoadedChannels(list, done);
+    });
+  }
   function $t(e) {
     var t = _t();
     if (!t || !t.length)
       return (F.splice(0, F.length), Qt(liveFavoritesOnly), hr(), void (e && e()));
     jr("Cargando canales de Addon…");
-    for (var a = [], i = t.length, n = 0; n < t.length; n++)
-      (function (t) {
-        P("fetchM3u", { url: t.url }, function (t, n) {
-          if (n && n.channels && n.channels.length)
-            for (var r = 0; r < n.channels.length; r++) a.push(n.channels[r]);
-          if (--i <= 0) {
-            (jr(""), F.splice(0, F.length));
-            for (var o = 0; o < a.length; o++)
-              ((a[o].index = o + 1), F.push(a[o]));
-            ((X.channel = 0),
-              Qt(liveFavoritesOnly),
-              hr(),
-              F[0] && ae && (ae.textContent = F[0].name),
-              "player" === X.screen &&
-                "live" === X.playerMode &&
-                (ao(), to(F[0], !0)),
-              e && e());
-          }
-        });
-      })(t[n]);
+    loadM3uChannels(t, function (list) {
+      showLoadedChannels(list, e);
+    });
   }
   function Gt(e, t, force) {
     var a = e || 76182;
@@ -2990,6 +3180,14 @@
                               }
                             else
                               i = DEFAULT_LIVE_CATEGORIES.slice();
+                            /* Categorías propias que siempre deben existir,
+                               aunque el portal entregue su propia lista. */
+                            (function () {
+                              for (var k = 0; k < i.length; k++)
+                                if (i[k] && i[k].id === DIRECTV_ESPN_CATEGORY.id)
+                                  return;
+                              i.push(DIRECTV_ESPN_CATEGORY);
+                            })();
                             (i.push({
                               id: "addons",
                               name: "➕ Addons M3U",
@@ -3661,10 +3859,13 @@
   }
   function ca(e, t) {
     P("fetchM3u", { url: e.url }, function (a, i) {
-      if (!a && i && i.channels && i.channels.length) {
+      var chans = i && i.channels ? addonFilterChannels(e, i.channels) : [];
+      if (!a && chans.length) {
         for (var n = _t(), r = !1, o = 0; o < n.length; o++)
           if (n[o].url === e.url) {
-            ((n[o].count = i.channels.length), (r = !0));
+            ((n[o].count = chans.length),
+              e.filter && (n[o].filter = e.filter),
+              (r = !0));
             break;
           }
         (r ||
@@ -3672,10 +3873,11 @@
             id: e.id || "addon_" + Date.now(),
             name: e.name || "Lista M3U",
             url: e.url,
-            count: i.channels.length,
+            count: chans.length,
+            filter: e.filter || "",
           }),
           kt(n),
-          t && t(null, i.channels.length));
+          t && t(null, chans.length));
       } else t && t(a || "No se encontraron canales en la lista");
     });
   }
@@ -4347,6 +4549,7 @@
     var i = t("screen-player");
     i && (i.classList.add("is-mini"), i.classList.add("is-active"));
     var n = le ? le.querySelector(".focusable") : null;
+    if (!n && de) n = de.querySelector(".focusable");
     (n && rt(n),
       e._detailsLoaded
         ? Jr(e, X.detailEpisode)
@@ -4466,6 +4669,17 @@
       "sin datos" !== normalized
     );
   }
+  function restoreDetailFocus() {
+    if ("detail" !== X.screen) return;
+    var screen = t("screen-detail");
+    if (X.focus && screen && screen.contains(X.focus)) return;
+    /* Ca() reconstruye los botones del detalle; el foco anterior queda
+       desconectado y el control remoto parecía no responder al entrar por
+       primera vez a una serie. Se devuelve el foco al primer botón. */
+    var target = (le && le.querySelector(".focusable")) || null;
+    if (!target && de) target = de.querySelector(".focusable");
+    target && rt(target);
+  }
   function Ca(n) {
     ((oe = t("detail-left")),
       (se = t("detail-player")),
@@ -4544,7 +4758,10 @@
         Kr(n, X.detailEpisode);
       }),
       (se._onMove = function () {
-        return !1;
+        /* Nunca dejar el foco atrapado en la carátula del reproductor: si el
+           espectador pulsa cualquier dirección, pasa a los botones. */
+        var firstBtn = le && (le.querySelector(".focusable") || ot(le));
+        return firstBtn ? (rt(firstBtn), !0) : !1;
       }));
     var T = [
       {
@@ -4858,18 +5075,18 @@
           de.appendChild(u);
         }
         var m = e("div", "detail-related", "Quizás te guste");
-        m.style.top = n ? "106px" : "18px";
-        m.style.fontSize = n ? "24px" : "30px";
-        m.style.height = n ? "30px" : "38px";
+        m.style.top = n ? "136px" : "18px";
+        m.style.fontSize = n ? "32px" : "36px";
+        m.style.height = n ? "40px" : "46px";
         de.appendChild(m);
 
         var g = e("div", "detail-grid scrollable");
-        g.style.top = n ? "142px" : "64px";
-        g.style.height = n ? "280px" : "375px";
+        g.style.top = n ? "178px" : "66px";
+        g.style.height = n ? "322px" : "376px";
 
-        var pWidth = n ? 165 : 230;
-        var pHeight = n ? 230 : 322;
-        var cellH = n ? 270 : 365;
+        var pWidth = n ? 200 : 230;
+        var pHeight = n ? 280 : 322;
+        var cellH = n ? 326 : 374;
 
         var relList = getRelatedItems(t, l, 10);
         for (var w = 0; w < relList.length; w++) {
@@ -4925,9 +5142,9 @@
               };
               T.appendChild(cardPoster);
               var dName = e("div", "d-name", relItem.title);
-              dName.style.top = (pHeight + 4) + "px";
-              dName.style.height = n ? "28px" : "34px";
-              dName.style.fontSize = n ? "19px" : "22px";
+              dName.style.top = (pHeight + 6) + "px";
+              dName.style.height = n ? "36px" : "42px";
+              dName.style.fontSize = n ? "24px" : "28px";
               T.appendChild(dName);
               g.appendChild(T);
             })(S, w);
@@ -4963,9 +5180,40 @@
       a(ce),
       a(fe),
       a(he),
-      ue && ue.classList.add("scrollable"),
-      ((me = e("div", "kb-edit focusable"))._activate = function () {}),
-      ce.appendChild(me));
+      ue && ue.classList.add("scrollable"));
+    me = e("input", "kb-edit focusable");
+    me.type = "text";
+    me.id = "kb-edit-input";
+    me.placeholder = "Buscar películas, series, actores…";
+    me.autocomplete = "off";
+    me.spellcheck = !1;
+    me.value = X.searchQuery || "";
+    me.oninput = function () {
+      Aa(me.value);
+    };
+    me.onchange = function () {
+      Aa(me.value);
+    };
+    me.onkeydown = function (e) {
+      var k = e.keyCode || e.which;
+      if (13 === k) {
+        try { me.blur(); } catch (err) {}
+        Pa();
+        var res = ot(he) || (t("search-suggestions") && ot(t("search-suggestions")));
+        if (res) rt(res);
+        e.preventDefault && e.preventDefault();
+      }
+    };
+    me._activate = function () {
+      rt(me);
+      try {
+        me.focus();
+        me.setSelectionRange &&
+          me.setSelectionRange(me.value.length, me.value.length);
+      } catch (err) {}
+    };
+    bindMagicTextInput(me);
+    ce.appendChild(me);
     for (
       var i = e("div", "kb-actions"),
         n = [
@@ -5024,6 +5272,7 @@
               Aa(X.searchQuery + e);
             };
           })(s[l][c])),
+          bindMagicActivate(p),
           d.appendChild(p),
           Be.push(p));
       }
@@ -5031,8 +5280,18 @@
     }
     var u = e("div", "kb-feedback focusable", "Feedback");
     ((u._activate = function () {}),
-      ce.appendChild(u),
-      Ia(),
+      bindMagicActivate(u),
+      ce.appendChild(u));
+    var hotRef = document.querySelector(".search-hot-refresh");
+    if (hotRef) {
+      hotRef.classList.add("focusable");
+      hotRef._activate = function () {
+        Ia();
+        Yt("Catálogo popular actualizado");
+      };
+      bindMagicActivate(hotRef);
+    }
+    (Ia(),
       ue.classList.remove("is-active"),
       ve.classList.remove("is-active"),
       pe.classList.remove("is-hidden"),
@@ -5128,22 +5387,86 @@
   function La() {
     (ce || _a(), lt("search"), X.searchQuery || Ia(), rt(me));
   }
+  function updateSearchSuggestions(query) {
+    var sugContainer = t("search-suggestions");
+    if (!sugContainer) return;
+    a(sugContainer);
+    if (!query || query.length < 2) {
+      sugContainer.classList.remove("is-active");
+      return;
+    }
+    var cleanQ = o(query.trim());
+    var matches = [];
+    var seenTitles = {};
+    for (var i = 0; i < l.length; i++) {
+      var itm = l[i];
+      if (!itm || !itm.title) continue;
+      var cleanTitle = o(itm.title);
+      var idx = cleanTitle.indexOf(cleanQ);
+      if (-1 !== idx) {
+        var baseKey = cleanTitle.replace(/[^a-z0-9]/g, "");
+        if (!seenTitles[baseKey]) {
+          seenTitles[baseKey] = !0;
+          var sScore = (0 === idx ? 100 : 50) + (parseFloat(itm.score) || 0) * 10;
+          matches.push({ title: itm.title, score: sScore });
+        }
+      }
+    }
+    matches.sort(function (a, b) {
+      return b.score - a.score;
+    });
+    var topSuggestions = matches.slice(0, 5);
+    if (0 === topSuggestions.length) {
+      sugContainer.classList.remove("is-active");
+      return;
+    }
+    sugContainer.classList.add("is-active");
+    var lbl = e("span", "search-sug-label", "💡 Sugerencias:");
+    sugContainer.appendChild(lbl);
+    for (var s = 0; s < topSuggestions.length; s++) {
+      (function (sugTitle) {
+        var chip = e("button", "search-sug-chip focusable", sugTitle);
+        chip._activate = function () {
+          Aa(sugTitle);
+        };
+        bindMagicActivate(chip);
+        sugContainer.appendChild(chip);
+      })(topSuggestions[s].title);
+    }
+  }
   function Ma() {
-    var e = ha("destacado"),
-      t = e && e.length ? e.slice(0, 10) : [];
-    return (
-      t.length ||
-        (t = (function () {
-          for (var e = M(), t = [], a = 0; a < e.length; a++)
-            -1 !==
-              String((e[a] && e[a].category) || "")
-                .toLowerCase()
-                .indexOf("busqueda") && t.push(T(e[a], a + 1));
-          return t;
-        })()),
-      t.length || (t = l.slice(0, 10)),
-      t
-    );
+    var scored = [];
+    var seen = {};
+    for (var i = 0; i < l.length; i++) {
+      var itm = l[i];
+      if (!itm || !itm.title || seen[itm.id]) continue;
+      seen[itm.id] = !0;
+      var pScore = 0;
+      var row = (String(itm.category || "") + " " + String(itm.kind || "")).toLowerCase();
+      if (/top|clasificad|popular|ranking|destacad/i.test(row)) pScore += 140;
+      if (/estreno|teatral|cartelera|novedad/i.test(row)) pScore += 120;
+      if (/2026/.test(row) || "2026" === String(itm.year)) pScore += 90;
+      if (/2025/.test(row) || "2025" === String(itm.year)) pScore += 60;
+      if (/netflix|hbo|disney|prime|apple|paramount/i.test(row)) pScore += 40;
+      var numScore = parseFloat(itm.score) || 0;
+      pScore += numScore * 15;
+      var y = parseInt(itm.year, 10) || 0;
+      if (y > 2000) pScore += (y - 2000) * 2;
+      scored.push({ item: itm, score: pScore });
+    }
+    scored.sort(function (a, b) {
+      return b.score - a.score;
+    });
+    var res = [];
+    var titleSeen = {};
+    for (var k = 0; k < scored.length && res.length < 10; k++) {
+      var base = scored[k].item.title.toLowerCase().replace(/[^a-z0-9]/g, "");
+      if (!titleSeen[base]) {
+        titleSeen[base] = !0;
+        res.push(scored[k].item);
+      }
+    }
+    return res.length ? res : l.slice(0, 10);
   }
   function Ia() {
     if (fe && !X.searchQuery) {
@@ -5153,20 +5476,30 @@
     }
   }
   function Ea() {
-    me &&
-      (X.searchQuery
-        ? ((me.textContent = X.searchQuery),
-          me.classList.remove("is-placeholder"))
-        : ((me.textContent = "Buscar películas, series, directores y actores."),
-          me.classList.add("is-placeholder")));
+    if (me) {
+      if ("INPUT" === me.tagName) {
+        if (me.value !== (X.searchQuery || "")) {
+          me.value = X.searchQuery || "";
+        }
+      } else {
+        X.searchQuery
+          ? ((me.textContent = X.searchQuery),
+            me.classList.remove("is-placeholder"))
+          : ((me.textContent = "Buscar películas, series…"),
+            me.classList.add("is-placeholder"));
+      }
+    }
   }
   function Aa(e) {
     ((X.searchQuery = e), Ea(), Pa());
   }
   function Da() {
+    try { if (me && me.blur) me.blur(); } catch (err) {}
+    try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch (err) {}
     (X.searchTimer && (clearTimeout(X.searchTimer), (X.searchTimer = null)),
       (X.searchQuery = ""),
       Ea(),
+      updateSearchSuggestions(""),
       he && a(he),
       (X.searchMatches = []),
       (X.searchPage = 0),
@@ -5179,10 +5512,47 @@
     var e = X.searchQuery || "",
       t = o(e.trim());
     if (t) {
-      for (var a = [], i = 0; i < l.length; i++) {
-        var n = o(l[i].title || ""),
-          r = l[i].alias ? o(l[i].alias) : "";
-        (-1 !== n.indexOf(t) || (r && -1 !== r.indexOf(t))) && a.push(l[i]);
+      updateSearchSuggestions(e.trim());
+      var scoredMatches = [];
+      var seenIds = {};
+      for (var i = 0; i < l.length; i++) {
+        var itm = l[i];
+        if (!itm || !itm.id || seenIds[itm.id]) continue;
+        var title = o(itm.title || ""),
+          alias = itm.alias ? o(itm.alias) : "";
+        var matchScore = 0;
+        if (title === t) {
+          matchScore += 2000;
+        } else if (0 === title.indexOf(t)) {
+          matchScore += 1000;
+        } else {
+          var wordIdx = title.indexOf(" " + t);
+          if (-1 !== wordIdx) {
+            matchScore += 500;
+          } else if (-1 !== title.indexOf(t)) {
+            matchScore += 250;
+          } else if (alias && -1 !== alias.indexOf(t)) {
+            matchScore += 150;
+          }
+        }
+        if (matchScore > 0) {
+          seenIds[itm.id] = !0;
+          var numScore = parseFloat(itm.score) || 0;
+          matchScore += numScore * 15;
+          var y = parseInt(itm.year, 10) || 0;
+          if (y > 2000) matchScore += (y - 2000) * 2;
+          var catKind = (String(itm.category || "") + " " + String(itm.kind || "")).toLowerCase();
+          if (/top|destacad|estreno|popular|cartelera/i.test(catKind)) matchScore += 100;
+          if (/netflix|hbo|disney|prime|apple|paramount/i.test(catKind)) matchScore += 50;
+          scoredMatches.push({ item: itm, score: matchScore });
+        }
+      }
+      scoredMatches.sort(function (a, b) {
+        return b.score - a.score;
+      });
+      var a = [];
+      for (var k = 0; k < scoredMatches.length; k++) {
+        a.push(scoredMatches[k].item);
       }
       if (
         (qa(a),
@@ -5211,7 +5581,10 @@
           });
         }, 350);
       }
-    } else Da();
+    } else {
+      updateSearchSuggestions("");
+      Da();
+    }
   }
   var Oa = 10;
   function qa(e) {
@@ -5512,7 +5885,10 @@
               (o._group = "style"),
               (o._index = r),
               (o._activate = function () {
-                ((X.playback.style = this._index), nn(), Y());
+                ((X.playback.style =
+                  ["white", "yellow", "cyan"][this._index] || "white"),
+                nn(),
+                Y());
                 for (
                   var e = t.querySelectorAll(".pb-opt"), a = 0;
                   a < e.length;
@@ -6769,6 +7145,9 @@
     qi = null,
     Ni = null,
     Ri = null,
+    ZiRowBg = null,
+    ZiOptsBg = null,
+    ZiOptsQuality = null,
     Vi = null,
     Hi = null,
     Ui = null,
@@ -6786,13 +7165,26 @@
     Yi = 0,
     Zi = "normal",
     en = "white",
+    enBg = "outline",
     tn = "contain",
     an = 0;
   function nn() {
+    var styleVal = X.playback.style;
+    if ("number" === typeof styleVal)
+      styleVal = ["white", "yellow", "cyan"][Number(styleVal) || 0] || "white";
+    en =
+      ["white", "yellow", "cyan", "lime"].indexOf(styleVal) >= 0
+        ? styleVal
+        : "white";
+    var bgVal = X.playback.subtitleBg;
+    if ("number" === typeof bgVal)
+      bgVal = ["outline", "none", "box"][Number(bgVal) || 0] || "outline";
+    enBg =
+      ["outline", "none", "box"].indexOf(bgVal) >= 0 ? bgVal : "outline";
     ((Zi =
       ["normal", "big", "small"][Number(X.playback.size) || 0] || "normal"),
-      (en =
-        ["white", "yellow", "black"][Number(X.playback.style) || 0] || "white"),
+      /* Estado recordado: si el espectador activó los subtítulos, se mantienen
+         hasta que los desactive. Por defecto vienen apagados. */
       Ki || (Ji = !!X.playback.subtitle),
       Zn(
         ["cover", "contain", "16-9", "4-3"][Number(X.playback.screen) || 0] ||
@@ -6889,8 +7281,18 @@
   }
   var pn = [],
     un = {},
+    unKeys = [],
     vn = {},
     fn = null;
+  function cacheTrackInfo(k, val) {
+    if (!k) return;
+    un[k] = val;
+    unKeys.push(k);
+    if (unKeys.length > 150) {
+      var oldest = unKeys.shift();
+      if (oldest && oldest !== k) delete un[oldest];
+    }
+  }
   function hn(e) {
     if (!e) return 0;
     var t = e.replace(",", ".").split(":");
@@ -6947,8 +7349,16 @@
     Bi &&
       (Bi.classList.remove("size-small", "size-normal", "size-big"),
       Bi.classList.add("size-" + Zi),
-      Bi.classList.remove("color-white", "color-yellow", "color-black"),
-      Bi.classList.add("color-" + en));
+      Bi.classList.remove(
+        "color-white",
+        "color-yellow",
+        "color-cyan",
+        "color-lime",
+        "color-black"
+      ),
+      Bi.classList.add("color-" + en),
+      Bi.classList.remove("bg-outline", "bg-none", "bg-box"),
+      Bi.classList.add("bg-" + enBg));
   }
   function yn(e) {
     if (Bi)
@@ -7124,6 +7534,8 @@
         a || mn((Qi = t[0]));
       }
     } else {
+      /* Si el espectador los había activado antes, se respeta su estado
+         guardado. Si nunca los activó (o los desactivó), quedan apagados. */
       if (!X.playback.subtitle) return ((Ji = !1), (Qi = null), void mn(null));
       if (!t.length) return ((Ji = !1), (Qi = null), void mn(null));
       ((Ji = !0), (Qi = t[0]));
@@ -7260,6 +7672,13 @@
                 ((n._activate = function () {
                   Xn(t);
                 }),
+                  (n._onMove = function (dir) {
+                    /* Baja a REPRODUCCIÓN (Normal / Modo Fluido). */
+                    if ("down" !== dir) return !1;
+                    var row = document.getElementById("psv-player-row"),
+                      first = row ? row.querySelector(".psv-btn") || ot(row) : null;
+                    return first ? (rt(first), !0) : !1;
+                  }),
                   c.appendChild(n));
               })(r[p], p);
             yi.appendChild(c);
@@ -7299,7 +7718,14 @@
                         var episodeButton = yi.querySelector(".psv-ep-btn.is-selected") || yi.querySelector(".psv-ep-btn");
                         return episodeButton ? (rt(episodeButton), !0) : !0;
                       }
-                      return "down" === direction ? !0 : !1;
+                      if ("down" === direction) {
+                        var playerRow = document.getElementById("psv-player-row"),
+                          firstMode = playerRow
+                            ? playerRow.querySelector(".psv-btn") || ot(playerRow)
+                            : null;
+                        return firstMode ? (rt(firstMode), !0) : !1;
+                      }
+                      return !1;
                     };
                   })(t, i)),
                   u.appendChild(i));
@@ -7816,8 +8242,59 @@
         })(i[n]);
     }
   }
+  function refreshQualityOptions() {
+    if (!ZiOptsQuality) return;
+    a(ZiOptsQuality);
+    var info = window.__xuperStreamInfo || null,
+      mi = un[Ln(bn())],
+      tracks = (mi && mi.tracks) || (info && info.availableTracks) || [],
+      uhd = xUhdPanel(),
+      heights = [],
+      seen = {},
+      k,
+      h;
+    for (k = 0; k < tracks.length; k++) {
+      h = Number(tracks[k] && tracks[k].height) || 0;
+      if (!h) continue;
+      if (!uhd && h >= 2000) continue;
+      if (seen[h]) continue;
+      seen[h] = !0;
+      heights.push(h);
+    }
+    heights.sort(function (a, b) {
+      return b - a;
+    });
+    var cur = X.playback.quality || "auto",
+      opts = [{ label: "Automática", value: "auto" }];
+    for (k = 0; k < heights.length; k++)
+      opts.push({
+        label: heights[k] >= 2000 ? "4K" : heights[k] + "p",
+        value: String(heights[k]),
+      });
+    var hasCur = !1;
+    for (k = 0; k < opts.length; k++) if (opts[k].value === cur) hasCur = !0;
+    if (!hasCur)
+      opts.push({
+        label: /^\d+$/.test(cur) ? (/^(?:2160|2000)$/.test(cur) ? "4K" : cur + "p") : cur,
+        value: cur,
+      });
+    for (k = 0; k < opts.length; k++)
+      (function (opt) {
+        var b = e("button", "dps-btn focusable", opt.label);
+        (b.setAttribute("data-quality", opt.value),
+          opt.value === cur && b.classList.add("is-selected"),
+          (b._activate = function () {
+            ((X.playback.quality = opt.value), (X.trackIndex = 0), Y(), ir());
+            "player" === X.screen &&
+              "vod" === X.playerMode &&
+              (jr("Cambiando calidad a " + opt.label + "…"), sr());
+          }),
+          ZiOptsQuality.appendChild(b));
+      })(opts[k]);
+  }
   function ir() {
     var t = En(un[Ln(bn())]);
+    refreshQualityOptions();
     if (Oi) {
       var i = Oi.parentNode;
       (i && i.classList.toggle("is-hidden", !t.length),
@@ -7829,6 +8306,7 @@
       (qi && qi.classList.toggle("is-visible", Ji && t.length > 0),
       Ni && Ni.classList.toggle("is-visible", Ji && t.length > 0),
       Ri && Ri.classList.toggle("is-visible", Ji && t.length > 0),
+      ZiRowBg && ZiRowBg.classList.toggle("is-visible", Ji && t.length > 0),
       Ji)
     ) {
       if (Vi) {
@@ -7861,6 +8339,15 @@
         ) {
           var p = d[c].getAttribute("data-style");
           d[c].classList.toggle("is-selected", p === en);
+        }
+      if (ZiOptsBg)
+        for (
+          var dB = ZiOptsBg.querySelectorAll(".dps-btn"), cB = 0;
+          cB < dB.length;
+          cB++
+        ) {
+          var pB = dB[cB].getAttribute("data-bg");
+          dB[cB].classList.toggle("is-selected", pB === enBg);
         }
     }
   }
@@ -8125,9 +8612,12 @@
       (qi = t("dps-row-lang")),
       (Ni = t("dps-row-size")),
       (Ri = t("dps-row-style")),
+      (ZiRowBg = t("dps-row-bg")),
       (Vi = t("dps-lang-options")),
       (Hi = t("dps-size-options")),
       (Ui = t("dps-style-options")),
+      (ZiOptsBg = t("dps-bg-options")),
+      (ZiOptsQuality = t("dps-quality-options")),
       (Fi = t("dps-btn-exit")),
       (Bi = t("player-subtitles")),
       Oi &&
@@ -8136,6 +8626,10 @@
             var e = En(un[Ln(bn())]);
             (!Qi && e.length && (Qi = e[0]), Qi && mn(Qi));
           } else mn(null);
+          /* Guarda la elección del espectador: se mantiene en los próximos
+             títulos hasta que vuelva a desactivar los subtítulos. */
+          X.playback.subtitle = Ji;
+          Y();
           (ir(), Dn());
         }),
       Hi)
@@ -8150,9 +8644,24 @@
       for (var s = Ui.querySelectorAll(".dps-btn"), l = 0; l < s.length; l++)
         (function (e) {
           e._activate = function () {
-            ((en = e.getAttribute("data-style") || "white"), gn(), ir());
+            ((en = e.getAttribute("data-style") || "white"),
+              (X.playback.style = en),
+              Y(),
+              gn(),
+              ir());
           };
         })(s[l]);
+    if (ZiOptsBg)
+      for (var s2 = ZiOptsBg.querySelectorAll(".dps-btn"), l2 = 0; l2 < s2.length; l2++)
+        (function (e) {
+          e._activate = function () {
+            ((enBg = e.getAttribute("data-bg") || "outline"),
+              (X.playback.subtitleBg = enBg),
+              Y(),
+              gn(),
+              ir());
+          };
+        })(s2[l2]);
     (Fi &&
       (Fi._activate = function () {
         tr();
@@ -8860,19 +9369,42 @@
     Sr && (clearTimeout(Sr), (Sr = null));
   }
   function Mr() {
-    if (xe) {
-      if (wr && br && "vod" === X.playerMode) {
-        var e = br,
-          t = Math.max(0, Math.floor(Cr + (xe.currentTime || 0)));
-        wr = !1;
-        var a = e + "?start=" + t;
-        return (Xi && (a += "&a=" + Xi), jr("Reanudando vídeo…"), void Gr(a));
+    if (!xe) return;
+    if (wr && br && "vod" === X.playerMode) {
+      var base = br,
+        at = Math.max(0, Math.floor(Cr + (xe.currentTime || 0)));
+      wr = !1;
+      if (!xe.ended && xe.readyState > 0) {
+        /* Reanudación instantánea: el relay sigue entregando datos, así que
+           basta con play(). Antes siempre se reiniciaba ffmpeg (varios
+           segundos de espera al quitar la pausa). Sólo si el vídeo no avanza
+           en 2,5 s se reinicia el relay en la misma posición. */
+        try {
+          var pr = xe.play();
+          pr && pr.catch && pr.catch(function () {});
+        } catch (e) {}
+        var before = xe.currentTime || 0,
+          startedAt = Date.now();
+        setTimeout(function () {
+          if (!xe || br !== base || "vod" !== X.playerMode) return;
+          if (xe.paused || xe.ended) return;
+          if ((xe.currentTime || 0) > before + 0.2 || xe.readyState >= 3)
+            return;
+          if (Date.now() - startedAt < 1500) return;
+          var url = base + "?start=" + at;
+          Xi && (url += "&a=" + Xi);
+          jr("Reanudando vídeo…");
+          Gr(url);
+        }, 2500);
+        return;
       }
-      try {
-        var i = xe.play();
-        i && i.catch && i.catch(function () {});
-      } catch (e) {}
+      var a = base + "?start=" + at;
+      return (Xi && (a += "&a=" + Xi), jr("Reanudando vídeo…"), void Gr(a));
     }
+    try {
+      var i = xe.play();
+      i && i.catch && i.catch(function () {});
+    } catch (e) {}
   }
   var Ir = 0,
     Er = null,
@@ -8902,15 +9434,42 @@
   function Rr() {
     if (((Er = null), xe && Ir)) {
       if (br) {
-        if (Or) return void (Ir = 0);
-        Or = !0;
-        var e = Cr + (xe.currentTime || 0),
+        /* Modo Fluido no admite seek dentro del pipe: cada búsqueda reinicia el
+           relay con ?start=. Si el espectador vuelve a buscar mientras el
+           anterior arranca, se cancela ese arranque y se atiende el nuevo
+           (antes se ignoraba y la TV parecía no responder). */
+        if (Or) {
+          (qr && (clearTimeout(qr), (qr = null)), (Or = !1));
+        }
+        var step = Ir,
+          e = Cr + (xe.currentTime || 0),
           t = Math.max(0, e + Ir);
         Ir = 0;
-        var a = (X.playerItem && X.playerItem.duration) || xe.duration || 0;
-        (a > 0 && t > a - 2 && (t = Math.max(0, a - 2)), (Cr = Math.floor(t)));
-        var i = br + "?start=" + Cr;
-        return ((qr = setTimeout(Nr, 12e3)), void Gr(i));
+        var a = ii(
+          (X.playerItem && X.playerItem.duration) ||
+            (X.playerEpisode && X.playerEpisode.duration) ||
+            0
+        );
+        (!a &&
+          xe &&
+          isFinite(xe.duration) &&
+          xe.duration > 0 &&
+          (a = xe.duration),
+          a > 0 && t > a - 2 && (t = Math.max(0, a - 2)));
+        /* No se toca Cr antes de Gr(): zr() guarda el progreso real con
+           Cr + currentTime. Si se adelantaba Cr aquí, el progreso se guardaba
+           duplicado y al reanudar el título podía saltar de posición. */
+        var seekTo = Math.floor(t),
+          i = br + "?start=" + seekTo;
+        /* Conserva la pista de audio elegida: antes el reinicio volvía a la 0. */
+        Xi && (i += "&a=" + Xi);
+        (Gr(i),
+          jr("Buscando " + ai(seekTo) + "…"),
+          oi(seekTo, Hr()),
+          si(step > 0 ? "forward" : "backward"),
+          (Or = !0),
+          (qr = setTimeout(Nr, 12e3)));
+        return;
       }
       var n = (xe.currentTime || 0) + Ir;
       Ir = 0;
@@ -8922,11 +9481,18 @@
     } else Ir = 0;
   }
   function li(e) {
-    xe &&
-      ((Ir += e),
+    if (!xe) return;
+    /* Modo Fluido no es seekable dentro del pipe (Accept-Ranges: none): el
+       salto se resuelve en Rr() reiniciando el relay en la posición destino.
+       El aviso se muestra ya para que la TV no parezca congelada. */
+    if (br && "vod" === X.playerMode) {
+      var target = Math.max(0, Math.min(Hr() || 86400, Vr() + e));
+      (jr("Buscando " + ai(target) + "…"), pi());
+    }
+    ((Ir += e),
       Er && clearTimeout(Er),
       (Er = setTimeout(Rr, 800)),
-      si(e > 0 ? "fwd" : "rew"),
+      si(e > 0 ? "forward" : "backward"),
       setTimeout(function () {
         si("none");
       }, 600));
@@ -8955,7 +9521,10 @@
       ((Ye = !1),
         Pe && Pe.classList.remove("is-scrubbing"),
         e && Math.abs(t - a) >= 1 && li(t - a),
-        oi(Vr(), Hr()),
+        /* Muestra de inmediato el destino elegido: en Modo Fluido el <video>
+           reinicia su currentTime en 0 y Vr() volvería a sumar la posición
+           vieja hasta que arranca el relay. */
+        oi(e ? t : Vr(), Hr()),
         rt(Ce),
         ci());
     }
@@ -8979,7 +9548,7 @@
       oi((Ze = Math.max(0, Math.min(t - 1, Ze + e * a))), t);
     }
   }
-  function zr() {
+  function zr(skipAbort) {
     (Lr(), "vod" === X.playerMode && xe) &&
       sn(
         br ? Cr + (xe.currentTime || 0) : xe.currentTime || 0,
@@ -9009,14 +9578,21 @@
       var a = /^(http:\/\/127\.0\.0\.1:\d+)/.exec(gr);
       a && (e = a[1]);
     }
-    if (e)
+    /* Al reiniciar el relay (seek o cambio de modo) NO se envía /media/abort:
+       esa petición es asíncrona y podía llegar después de que el relay hubiera
+       arrancado el nuevo ffmpeg, matándolo. El relay ya detiene el proceso
+       anterior al recibir la nueva petición. Esto causaba que al adelantar el
+       vídeo volviera al principio o se quedara cargando. */
+    if (!skipAbort) {
+      if (e)
+        try {
+          var i = new XMLHttpRequest();
+          (i.open("GET", e + "/media/abort", !0), i.send());
+        } catch (e) {}
       try {
-        var i = new XMLHttpRequest();
-        (i.open("GET", e + "/media/abort", !0), i.send());
+        P("abortMedia", {}, function () {});
       } catch (e) {}
-    try {
-      P("abortMedia", {}, function () {});
-    } catch (e) {}
+    }
     if (((gr = ""), (mr = ""), xe)) {
       ((xe.onerror = null),
         (xe.onwaiting = null),
@@ -9092,7 +9668,7 @@
   function Gr(e, t) {
     if (xe && e) {
       var a = !!(t = t || {}).nativeHls;
-      (zr(), (wr = !1), (gr = e));
+      (zr(!!kr(e)), (wr = !1), (gr = e));
       var i = /^(http:\/\/127\.0\.0\.1:\d+)/.exec(e);
       if ((i && (mr = i[1]), kr(e))) {
         br = e.split("?")[0];
@@ -9156,6 +9732,18 @@
               "No fue posible cambiar el idioma en reproducción Normal"),
             void jr(X.streamError)
           );
+        /* Antes de saltar a Modo Fluido, prueba otra copia compatible en el
+           reproductor nativo. Así muchas películas se ven en Normal sin que
+           el espectador tenga que activar nada. */
+        if (
+          (3 === t || 4 === t) &&
+          "vod" === X.playerMode &&
+          "normal" === X.streamMode &&
+          X.playerItem &&
+          copyTryCount < 1 &&
+          xNextCopy()
+        )
+          return;
         if (
           4 === t &&
           "vod" === X.playerMode &&
@@ -9417,9 +10005,10 @@
         i.container = n;
       }
       i.trackIndex = X.trackIndex || 0;
-      ((i.quality = "auto"),
+      var panelUhd = xUhdPanel();
+      ((i.quality = X.playback.quality || "auto"),
         (i.hevc = xHevcCapable()),
-        (i.uhd = xUhdPanel()));
+        (i.uhd = panelUhd));
       var r = X.playerEpisode,
         o = (r && r.id) || (e && e.id) || "",
         s = un[o] || un[Ln(e)],
@@ -9483,7 +10072,7 @@
           selected: n.selectedTrack || {},
           duration: n.duration || 0,
         };
-        ((un[Ln(e)] = r), An(r));
+        (cacheTrackInfo(Ln(e), r), An(r));
         try {
           window.__xuperStreamInfo = {
             selectedTrack: n.selectedTrack || {},
@@ -9861,35 +10450,110 @@
     var welcomeVersion = t("screen-welcome");
     welcomeVersion = welcomeVersion && welcomeVersion.querySelector(".welcome-version");
     welcomeVersion && (welcomeVersion.textContent = "v" + APP_VERSION);
-    (oo(),
-      window.addEventListener("resize", oo, !1),
-      window.addEventListener("orientationchange", oo, !1),
-      document.addEventListener("visibilitychange", oo, !1),
-      setTimeout(oo, 250),
-      setTimeout(oo, 1200),
-      setTimeout(oo, 3e3),
-      document.addEventListener("keydown", ut, !1),
-      document.addEventListener(
-        "keyup",
-        function (e) {
-          (461 !== (e.keyCode || e.which) &&
-            "Back" !== e.key &&
-            "GoBack" !== e.key) ||
-            ut(e);
-        },
-        !1
-      ),
-      window.addEventListener(
-        "popstate",
-        function () {
-          ct();
-        },
-        !1
-      ),
+    oo();
+    window.addEventListener("resize", oo, !1);
+    window.addEventListener("orientationchange", oo, !1);
+    document.addEventListener("visibilitychange", oo, !1);
+    setTimeout(oo, 250);
+    setTimeout(oo, 1200);
+    setTimeout(oo, 3e3);
+    document.addEventListener("keydown", ut, !1);
+    document.addEventListener(
+      "keyup",
+      function (e) {
+        (461 !== (e.keyCode || e.which) &&
+          "Back" !== e.key &&
+          "GoBack" !== e.key) ||
+          ut(e);
+      },
+      !1
+    );
+    window.addEventListener(
+      "popstate",
+      function () {
+        ct();
+      },
+      !1
+    );
+      var lastHoverAt = 0;
+      document.addEventListener("mouseover", function (e) {
+        /* El control Magic puede emitir decenas de "mouseover" por segundo.
+           En TVs lentas eso repintaba el foco sin parar; se limita a ~12 fps. */
+        var now = Date.now();
+        if (now - lastHoverAt < 80) return;
+        lastHoverAt = now;
+        var t = n(e.target, ".focusable");
+        if (t && at(t) && X.focus !== t) {
+          rt(t, !0);
+        }
+      }, !1);
       document.addEventListener("click", function (e) {
         var t = n(e.target, ".focusable");
-        t && (rt(t, !0), t._activate && t._activate());
-      }));
+        if (t) {
+          rt(t, !0);
+          if (t._activate) {
+            t._activate();
+          } else if (t.click && t !== e.target) {
+            t.click();
+          }
+          return;
+        }
+        if (Ht) {
+          if (!n(e.target, ".dialog-addons-box")) {
+            la();
+            return;
+          }
+        } else if (catalogFilterDialog) {
+          if (!n(e.target, ".catalog-filter-card")) {
+            closeCatalogFilter();
+            return;
+          }
+        } else if (liveFavoritePrompt) {
+          if (!n(e.target, ".pc-favorite-box")) {
+            closeLiveFavoriteConfirm();
+            return;
+          }
+        } else if (xa) {
+          if (!n(e.target, ".season-popup")) {
+            Ta();
+            return;
+          }
+        } else if (X.categoryPickerOpen) {
+          if (!n(e.target, ".player-categories") && !n(e.target, ".pcat-box")) {
+            ur();
+            return;
+          }
+        } else if (X.episodeBrowserOpen) {
+          if (!n(e.target, "#player-episodes")) {
+            zn();
+            return;
+          }
+        } else if ("player" === X.screen) {
+          if (!n(e.target, ".player-channels") && !n(e.target, ".player-infobar")) {
+            if (X.channelsOpen) {
+              no();
+            } else {
+              X.infobar ? ui() : pi();
+            }
+          }
+        }
+      }, !1);
+      window.addEventListener("wheel", function (e) {
+        var delta = e.deltaY || e.wheelDelta || 0;
+        if (!delta) return;
+        var scrollY = findScrollable(e.target, !1);
+        if (scrollY) {
+          scrollY.scrollTop += (delta > 0 ? 120 : -120);
+          e.preventDefault && e.preventDefault();
+          return;
+        }
+        var scrollX = findScrollable(e.target, !0);
+        if (scrollX) {
+          scrollX.scrollLeft += (delta > 0 ? 200 : -200);
+          e.preventDefault && e.preventDefault();
+          return;
+        }
+      }, !1);
     try {
       _a();
     } catch (e) {
