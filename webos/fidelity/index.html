@@ -303,6 +303,11 @@ if (!Array.prototype.findIndex) {
             <div class="dps-label">Audio</div>
             <div class="dps-options scrollable" id="dps-audio-options"></div>
           </div>
+          <!-- Calidad de vídeo -->
+          <div class="dps-row" id="dps-row-quality">
+            <div class="dps-label">Calidad</div>
+            <div class="dps-options" id="dps-quality-options"></div>
+          </div>
           <!-- Subtítulo Switch -->
           <div class="dps-row" id="dps-row-switch">
             <div class="dps-label">Subtítulo</div>
@@ -334,6 +339,15 @@ if (!Array.prototype.findIndex) {
               <button class="dps-btn focusable" data-style="yellow"><span class="dps-color-preview yellow">Aa</span></button>
               <button class="dps-btn focusable" data-style="cyan"><span class="dps-color-preview cyan">Aa</span></button>
               <button class="dps-btn focusable" data-style="lime"><span class="dps-color-preview lime">Aa</span></button>
+            </div>
+          </div>
+          <!-- Subtitle Background -->
+          <div class="dps-row dps-sub-subrow" id="dps-row-bg">
+            <div class="dps-label">Fondo</div>
+            <div class="dps-options" id="dps-bg-options">
+              <button class="dps-btn focusable is-selected" data-bg="outline">Contorno</button>
+              <button class="dps-btn focusable" data-bg="none">Sin fondo</button>
+              <button class="dps-btn focusable" data-bg="box">Caja negra</button>
             </div>
           </div>
         </div>

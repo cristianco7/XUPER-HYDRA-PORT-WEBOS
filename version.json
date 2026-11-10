@@ -1,9 +1,9 @@
 {
-  "version": "3.0.5",
+  "version": "3.0.7",
   "name": "XuperTV",
   "minWebos": "1.0.0",
-  "ipkUrl": "https://github.com/cristianco7/XUPER-HYDRA-PORT-WEBOS/releases/download/v3.0.5/com.webosflux.xuptertv.fidelity_3.0.5_all.ipk",
-  "sha256": "8913569C74D2AD88803F27EBCB7789B2E6C8BFAB6583A9B38CF741B52A9BAED6",
-  "changelog": "Versión 3.0.5: Soporte completo para control Magic Remote en toda la aplicación (hover sincronizado, clics en botones y fondos, rueda de scroll en listas y rieles). Corrección del diálogo de Addons que aparecía detrás de categorías e impedía bajar o seleccionar elementos. Búsqueda inteligente: catálogo popular ordenado por popularidad real, sugerencias de títulos en vivo al escribir, barra de búsqueda interactiva compatible con teclado en pantalla de webOS y escritura directa desde teclado o control. Modo Fluido: al buscar muestra de inmediato la posición destino, el reloj ya no se reinicia y el salto rápido ±10 s funciona reiniciando el relay en la posición elegida y conservando la pista de audio. Corregido el reinicio del relay al adelantar (la petición de abort podía matar el nuevo ffmpeg y devolver el vídeo al principio) y la reanudación tras pausa ahora es instantánea, reiniciando el relay solo si el vídeo no avanza. Nuevo addon y categoría 'DirecTV / ESPN' en TV en vivo, con DSports y señales ESPN de Latinoamérica. Corregido el foco al entrar por primera vez a la vista previa de una serie (los botones se reconstruían y el control remoto quedaba sin respuesta). Subtítulos con estilo Netflix (caja negra semitransparente), apagados por defecto y con estado recordado: si el espectador los activa se mantienen hasta que los desactive. Títulos de 'Quizás te guste' y botones de temporada/capítulo más grandes; navegación más fluida en TVs lentas.",
-  "releaseDate": "2026-11-09"
+  "ipkUrl": "https://github.com/cristianco7/XUPER-HYDRA-PORT-WEBOS/releases/download/v3.0.7/com.webosflux.xuptertv.fidelity_3.0.7_all.ipk",
+  "sha256": "36B6557844DFB93D5FB0CDA7CD27543DE9EBD70B277D9DEF9847E961102B3707",
+  "changelog": "Versión 3.0.7: Nuevo selector de Calidad en 'Ajuste de reproducir' (Automática y las resoluciones disponibles: 4K, 1080p, 720p, etc.). La calidad elegida se recuerda y se aplica al cambiar de capítulo o título; en Modo Fluido reinicia el relay en la misma posición con la nueva calidad. Se mantiene el respaldo automático a otra copia compatible si falla. Versión 3.0.6: Ajuste de reproducir ya no corta las opciones; subtítulos sin caja negra fija con Fondo (Contorno negro, Sin fondo, Caja negra) y Color real (blanco, amarillo, cian, lima). Versión 3.0.5: Magic Remote, diálogo de Addons, búsqueda inteligente, Modo Fluido fiable, categoría 'DirecTV / ESPN', foco en vista previa de series y subtítulos recordados.",
+  "releaseDate": "2026-11-10"
 }

@@ -1,6 +1,6 @@
 !(function () {
   "use strict";
-  var APP_VERSION = "3.0.5";
+  var APP_VERSION = "3.0.7";
   function e(e, t, a) {
     var i = document.createElement(e);
     return (t && (i.className = t), null != a && (i.textContent = a), i);
@@ -1071,6 +1071,8 @@
         size: 0,
         style: 0,
         subtitle: !1,
+        subtitleBg: "outline",
+        quality: "auto",
       },
       crOn: !1,
       favs: {},
@@ -5883,7 +5885,10 @@
               (o._group = "style"),
               (o._index = r),
               (o._activate = function () {
-                ((X.playback.style = this._index), nn(), Y());
+                ((X.playback.style =
+                  ["white", "yellow", "cyan"][this._index] || "white"),
+                nn(),
+                Y());
                 for (
                   var e = t.querySelectorAll(".pb-opt"), a = 0;
                   a < e.length;
@@ -7140,6 +7145,9 @@
     qi = null,
     Ni = null,
     Ri = null,
+    ZiRowBg = null,
+    ZiOptsBg = null,
+    ZiOptsQuality = null,
     Vi = null,
     Hi = null,
     Ui = null,
@@ -7157,13 +7165,24 @@
     Yi = 0,
     Zi = "normal",
     en = "white",
+    enBg = "outline",
     tn = "contain",
     an = 0;
   function nn() {
+    var styleVal = X.playback.style;
+    if ("number" === typeof styleVal)
+      styleVal = ["white", "yellow", "cyan"][Number(styleVal) || 0] || "white";
+    en =
+      ["white", "yellow", "cyan", "lime"].indexOf(styleVal) >= 0
+        ? styleVal
+        : "white";
+    var bgVal = X.playback.subtitleBg;
+    if ("number" === typeof bgVal)
+      bgVal = ["outline", "none", "box"][Number(bgVal) || 0] || "outline";
+    enBg =
+      ["outline", "none", "box"].indexOf(bgVal) >= 0 ? bgVal : "outline";
     ((Zi =
       ["normal", "big", "small"][Number(X.playback.size) || 0] || "normal"),
-      (en =
-        ["white", "yellow", "black"][Number(X.playback.style) || 0] || "white"),
       /* Estado recordado: si el espectador activó los subtítulos, se mantienen
          hasta que los desactive. Por defecto vienen apagados. */
       Ki || (Ji = !!X.playback.subtitle),
@@ -7330,8 +7349,16 @@
     Bi &&
       (Bi.classList.remove("size-small", "size-normal", "size-big"),
       Bi.classList.add("size-" + Zi),
-      Bi.classList.remove("color-white", "color-yellow", "color-black"),
-      Bi.classList.add("color-" + en));
+      Bi.classList.remove(
+        "color-white",
+        "color-yellow",
+        "color-cyan",
+        "color-lime",
+        "color-black"
+      ),
+      Bi.classList.add("color-" + en),
+      Bi.classList.remove("bg-outline", "bg-none", "bg-box"),
+      Bi.classList.add("bg-" + enBg));
   }
   function yn(e) {
     if (Bi)
@@ -8215,8 +8242,59 @@
         })(i[n]);
     }
   }
+  function refreshQualityOptions() {
+    if (!ZiOptsQuality) return;
+    a(ZiOptsQuality);
+    var info = window.__xuperStreamInfo || null,
+      mi = un[Ln(bn())],
+      tracks = (mi && mi.tracks) || (info && info.availableTracks) || [],
+      uhd = xUhdPanel(),
+      heights = [],
+      seen = {},
+      k,
+      h;
+    for (k = 0; k < tracks.length; k++) {
+      h = Number(tracks[k] && tracks[k].height) || 0;
+      if (!h) continue;
+      if (!uhd && h >= 2000) continue;
+      if (seen[h]) continue;
+      seen[h] = !0;
+      heights.push(h);
+    }
+    heights.sort(function (a, b) {
+      return b - a;
+    });
+    var cur = X.playback.quality || "auto",
+      opts = [{ label: "Automática", value: "auto" }];
+    for (k = 0; k < heights.length; k++)
+      opts.push({
+        label: heights[k] >= 2000 ? "4K" : heights[k] + "p",
+        value: String(heights[k]),
+      });
+    var hasCur = !1;
+    for (k = 0; k < opts.length; k++) if (opts[k].value === cur) hasCur = !0;
+    if (!hasCur)
+      opts.push({
+        label: /^\d+$/.test(cur) ? (/^(?:2160|2000)$/.test(cur) ? "4K" : cur + "p") : cur,
+        value: cur,
+      });
+    for (k = 0; k < opts.length; k++)
+      (function (opt) {
+        var b = e("button", "dps-btn focusable", opt.label);
+        (b.setAttribute("data-quality", opt.value),
+          opt.value === cur && b.classList.add("is-selected"),
+          (b._activate = function () {
+            ((X.playback.quality = opt.value), (X.trackIndex = 0), Y(), ir());
+            "player" === X.screen &&
+              "vod" === X.playerMode &&
+              (jr("Cambiando calidad a " + opt.label + "…"), sr());
+          }),
+          ZiOptsQuality.appendChild(b));
+      })(opts[k]);
+  }
   function ir() {
     var t = En(un[Ln(bn())]);
+    refreshQualityOptions();
     if (Oi) {
       var i = Oi.parentNode;
       (i && i.classList.toggle("is-hidden", !t.length),
@@ -8228,6 +8306,7 @@
       (qi && qi.classList.toggle("is-visible", Ji && t.length > 0),
       Ni && Ni.classList.toggle("is-visible", Ji && t.length > 0),
       Ri && Ri.classList.toggle("is-visible", Ji && t.length > 0),
+      ZiRowBg && ZiRowBg.classList.toggle("is-visible", Ji && t.length > 0),
       Ji)
     ) {
       if (Vi) {
@@ -8260,6 +8339,15 @@
         ) {
           var p = d[c].getAttribute("data-style");
           d[c].classList.toggle("is-selected", p === en);
+        }
+      if (ZiOptsBg)
+        for (
+          var dB = ZiOptsBg.querySelectorAll(".dps-btn"), cB = 0;
+          cB < dB.length;
+          cB++
+        ) {
+          var pB = dB[cB].getAttribute("data-bg");
+          dB[cB].classList.toggle("is-selected", pB === enBg);
         }
     }
   }
@@ -8524,9 +8612,12 @@
       (qi = t("dps-row-lang")),
       (Ni = t("dps-row-size")),
       (Ri = t("dps-row-style")),
+      (ZiRowBg = t("dps-row-bg")),
       (Vi = t("dps-lang-options")),
       (Hi = t("dps-size-options")),
       (Ui = t("dps-style-options")),
+      (ZiOptsBg = t("dps-bg-options")),
+      (ZiOptsQuality = t("dps-quality-options")),
       (Fi = t("dps-btn-exit")),
       (Bi = t("player-subtitles")),
       Oi &&
@@ -8553,9 +8644,24 @@
       for (var s = Ui.querySelectorAll(".dps-btn"), l = 0; l < s.length; l++)
         (function (e) {
           e._activate = function () {
-            ((en = e.getAttribute("data-style") || "white"), gn(), ir());
+            ((en = e.getAttribute("data-style") || "white"),
+              (X.playback.style = en),
+              Y(),
+              gn(),
+              ir());
           };
         })(s[l]);
+    if (ZiOptsBg)
+      for (var s2 = ZiOptsBg.querySelectorAll(".dps-btn"), l2 = 0; l2 < s2.length; l2++)
+        (function (e) {
+          e._activate = function () {
+            ((enBg = e.getAttribute("data-bg") || "outline"),
+              (X.playback.subtitleBg = enBg),
+              Y(),
+              gn(),
+              ir());
+          };
+        })(s2[l2]);
     (Fi &&
       (Fi._activate = function () {
         tr();
@@ -9900,7 +10006,7 @@
       }
       i.trackIndex = X.trackIndex || 0;
       var panelUhd = xUhdPanel();
-      ((i.quality = panelUhd ? "auto" : "1080"),
+      ((i.quality = X.playback.quality || "auto"),
         (i.hevc = xHevcCapable()),
         (i.uhd = panelUhd));
       var r = X.playerEpisode,
