@@ -24,7 +24,11 @@ html, body {
      Android renders "sans-serif" (Roboto); webOS supplies its own sans face. */
   font-family: Roboto, "Helvetica Neue", Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
-  cursor: none;
+  cursor: default;
+}
+
+.focusable, button, [tabindex], .poster, .pc-row, .settings-item, .home-tab-item, .pc-toolbar-btn, .pc-channel-fav, .pcat-tile, .search-sug-chip {
+  cursor: pointer;
 }
 
 img { border: 0; display: block; }
@@ -1019,9 +1023,9 @@ div, section, span { outline: none; }
 /* mTextUpdate: gold "T10-E73". */
 .detail-update {
   margin-top: 4px;
-  height: 30px;
-  font-size: 28px;
-  line-height: 30px;
+  height: 34px;
+  font-size: 32px;
+  line-height: 34px;
   font-weight: bold;
   color: #ffaa00;
   white-space: nowrap;
@@ -1152,7 +1156,7 @@ div, section, span { outline: none; }
 .detail-seasons-rail {
   position: absolute;
   left: 80px; top: 8px;
-  max-width: 600px; height: 44px;
+  max-width: 600px; height: 54px;
   display: -webkit-box;
   display: flex;
   overflow-x: auto;
@@ -1167,15 +1171,15 @@ div, section, span { outline: none; }
 }
 .detail-season-btn {
   display: inline-block;
-  height: 42px;
-  padding: 0 20px;
+  height: 54px;
+  padding: 0 26px;
   margin-right: 10px;
   border: 1px solid rgba(255, 255, 255, 0.28);
   border-radius: 6px;
   background: rgba(0, 0, 0, 0.6);
   color: #e0e0e0;
-  font-size: 22px;
-  line-height: 40px;
+  font-size: 30px;
+  line-height: 52px;
   cursor: pointer;
   box-sizing: border-box;
 }
@@ -1198,7 +1202,7 @@ div, section, span { outline: none; }
 .detail-season {
   position: absolute;
   left: 80px; top: 8px;
-  width: 180px; height: 42px;
+  width: 196px; height: 50px;
   border: 1px solid rgba(255, 255, 255, 0.25);
   border-radius: 6px;
   background: rgba(0, 0, 0, 0.55);
@@ -1213,14 +1217,14 @@ div, section, span { outline: none; }
   z-index: 20;
 }
 .detail-season .season-text {
-  font-size: 22px;
-  line-height: 40px;
+  font-size: 31px;
+  line-height: 48px;
   color: #ffffff;
   font-weight: 600;
 }
 .detail-season .season-arrow {
   position: absolute;
-  right: 14px; top: 12px;
+  right: 14px; top: 16px;
   width: 16px; height: 16px;
   transition: transform 0.25s ease;
 }
@@ -1292,7 +1296,7 @@ div, section, span { outline: none; }
 .detail-ranges {
   position: absolute;
   left: 280px; top: 8px;
-  right: 80px; height: 44px;
+  right: 80px; height: 54px;
   display: -webkit-box;
   display: flex;
   flex-direction: row;
@@ -1308,14 +1312,14 @@ div, section, span { outline: none; }
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  height: 42px;
-  padding: 0 16px;
+  height: 50px;
+  padding: 0 20px;
   margin-right: 10px;
   border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: rgba(0, 0, 0, 0.45);
-  font-size: 22px;
-  line-height: 40px;
+  font-size: 26px;
+  line-height: 48px;
   color: #e0e0e0;
   cursor: pointer;
   box-sizing: border-box;
@@ -1338,8 +1342,8 @@ div, section, span { outline: none; }
 /* Episode tiles : flex row */
 .detail-episodes {
   position: absolute;
-  left: 80px; top: 60px;
-  right: 80px; height: 50px;
+  left: 80px; top: 66px;
+  right: 80px; height: 68px;
   display: -webkit-box;
   display: flex;
   flex-direction: row;
@@ -1352,8 +1356,8 @@ div, section, span { outline: none; }
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 92px; height: 46px;
-  margin-right: 10px;
+  width: 122px; height: 60px;
+  margin-right: 14px;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.12);
   border: 1px solid rgba(255, 255, 255, 0.18);
@@ -1362,8 +1366,8 @@ div, section, span { outline: none; }
   text-align: center;
 }
 .detail-episode .ep-num {
-  font-size: 24px;
-  line-height: 46px;
+  font-size: 34px;
+  line-height: 60px;
   font-weight: 700;
   color: #ffffff;
   text-align: center;
@@ -1441,18 +1445,28 @@ div, section, span { outline: none; }
   left: 60.75px; top: 60px;         /* 319dp centered, 40dp */
   width: 478.5px; height: 67.5px;   /* 319dp x 45dp */
   background: rgba(255,255,255,0.102);            /* shape_base_search_edit_bg */
+  border: 1px solid rgba(255,255,255,0.15);
+  outline: none;
+  box-sizing: border-box;
+  padding: 0 20px;
   border-radius: 4.5px;             /* 3dp */
-  font-size: 36px;                  /* 24sp */
-  line-height: 67.5px;
+  font-size: 32px;                  /* 24sp */
+  line-height: 65.5px;
   text-align: center;
   color: #ffffff;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  cursor: pointer;
+}
+.kb-edit:focus,
+.kb-edit.is-focused {
+  border-color: #ffcc00;
+  box-shadow: 0 0 14px rgba(255, 204, 0, 0.45);
+  background: rgba(255,255,255,0.16);
 }
 .kb-edit .placeholder,
 .kb-edit.is-placeholder { color: #c4c4c4; }
-.kb-edit.is-focused { /* shape_base_search_edit_bg has no focused state */ }
 .kb-actions {
   position: absolute;
   left: 62.25px; top: 175.5px;
@@ -1580,6 +1594,54 @@ div, section, span { outline: none; }
   font-size: 24px;
   line-height: 38px;
   text-align: center;
+}
+
+.search-suggestions {
+  position: absolute;
+  left: 63px;
+  top: 122px;
+  width: 1220px;
+  height: 42px;
+  display: none;
+  align-items: center;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+}
+.search-suggestions.is-active {
+  display: flex;
+}
+.search-suggestions::-webkit-scrollbar { display: none; }
+.search-sug-label {
+  font-size: 20px;
+  font-weight: bold;
+  color: #ffaa00;
+  margin-right: 12px;
+  flex-shrink: 0;
+}
+.search-sug-chip {
+  display: inline-block;
+  padding: 6px 16px;
+  margin-right: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 20px;
+  color: #e0e0e0;
+  font-size: 20px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  outline: none;
+  transition: all 0.15s ease;
+}
+.search-sug-chip.is-focused,
+.search-sug-chip:hover {
+  background: #c91923;
+  border-color: #ff5260;
+  color: #ffffff;
+  box-shadow: 0 0 10px rgba(201, 25, 35, 0.6);
+  -webkit-transform: scale(1.04);
+  transform: scale(1.04);
 }
 
 .search-cell { position: absolute; width: 246px; height: 437px; }
@@ -2831,32 +2893,25 @@ div, section, span { outline: none; }
 }
 .player-subtitles-text {
   display: inline-block;
-  padding: 4px 12px;
-  /* "Sin fondo" must be genuinely transparent.  Legibility comes from the
-     dark glyph outline, not from a persistent black caption rectangle. */
-  background: transparent;
+  padding: 6px 16px;
+  /* Estilo Netflix: caja negra semitransparente, texto blanco sin cursiva,
+     sin contorno y con sombra suave. */
+  background: rgba(0, 0, 0, 0.72);
   color: #ffffff;
-  /* Match the visual reference: italic white lettering, a clean thin black
-     outline and only a subtle drop shadow. CSS text-stroke expands on every
-     side, so 2px here matches the apparent outline better than libass's 4. */
-  font-size: 48px;
-  /* Prefer the heavy Trebuchet face when the TV provides it.  The small
-     horizontal expansion gives the white fill the marker-like weight of the
-     reference instead of looking like a thin italic font inside an outline. */
-  font-family: "Trebuchet MS Bold", "Trebuchet MS", Trebuchet, Arial, sans-serif;
-  font-weight: 900;
-  font-style: italic;
-  letter-spacing: -0.5px;
-  line-height: 1.35;
-  border-radius: 0;
-  -webkit-text-stroke: 2px #000000;
-  text-shadow: 1px 2px 1px rgba(0,0,0,.95), 0.5px 0 0 #ffffff, -0.5px 0 0 #ffffff;
-  -webkit-transform: scaleX(1.035);
-  transform: scaleX(1.035);
-  -webkit-transform-origin: center bottom;
-  transform-origin: center bottom;
+  font-size: 46px;
+  font-family: "Helvetica Neue", "Segoe UI", Arial, sans-serif;
+  font-weight: 500;
+  font-style: normal;
+  letter-spacing: 0;
+  line-height: 1.3;
+  border-radius: 4px;
+  -webkit-text-stroke: 0;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.65);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
   max-width: 85%;
   word-wrap: break-word;
+  text-align: center;
 }
 
 /* In-player settings panel (com.module.playsetting.view.PlaySettingView).
@@ -3071,9 +3126,9 @@ div, section, span { outline: none; }
 .psv-episode-numbers::-webkit-scrollbar { display: none; }
 
 .psv-ep-btn {
-  width: 148px;
-  min-width: 148px;
-  height: 80px;
+  width: 164px;
+  min-width: 164px;
+  height: 96px;
   margin-right: 12px;
   margin-bottom: 0;
   padding: 6px 10px;
@@ -3112,9 +3167,9 @@ div, section, span { outline: none; }
   text-transform: uppercase;
 }
 .psv-ep-num {
-  font-size: 32px;
+  font-size: 40px;
   font-weight: 800;
-  line-height: 36px;
+  line-height: 44px;
   color: #ffffff;
 }
 
@@ -3620,27 +3675,27 @@ div, section, span { outline: none; }
   overflow-x: auto;
   overflow-y: hidden;
   width: 100%;
-  height: 86px;
+  height: 94px;
 }
 .pe-season {
   width: auto;
-  min-width: 210px;
-  height: 70px;
+  min-width: 230px;
+  height: 78px;
   margin: 0 14px 0 0;
   border: 1px solid rgba(255,255,255,.18);
   border-left: 1px solid rgba(255,255,255,.18);
   border-radius: 5px;
   -webkit-box-pack: center;
   justify-content: center;
-  font-size: 23px;
+  font-size: 30px;
 }
 .pe-season.is-selected { border-color: #e50914; background: rgba(229,9,20,.18); }
 .pe-season.is-focused { border-color: #fff; background: #e50914; }
 .pe-episodes-col { min-height: 0; }
 .pe-col-label { margin-bottom: 10px; font-size: 17px; }
 .pe-episodes { padding-right: 22px; }
-.pe-ep { min-height: 98px; padding: 10px 18px; margin-bottom: 7px; border-radius: 5px; }
-.pe-ep .pe-num { width: 52px; min-width: 52px; font-size: 28px; line-height: 36px; }
+.pe-ep { min-height: 104px; padding: 10px 18px; margin-bottom: 7px; border-radius: 5px; }
+.pe-ep .pe-num { width: 62px; min-width: 62px; font-size: 38px; line-height: 44px; }
 .pe-ep .pe-thumb { width: 142px; height: 80px; min-width: 142px; margin-right: 18px; }
 .pe-ep .pe-name { font-size: 23px; line-height: 30px; }
 .pe-ep .pe-meta { margin-top: 3px; font-size: 17px; line-height: 22px; }
@@ -3887,12 +3942,12 @@ div, section, span { outline: none; }
 }
 
 /* Subtitle size and color styling */
-.player-subtitles.size-small .player-subtitles-text { font-size: 36px; }
-.player-subtitles.size-normal .player-subtitles-text { font-size: 48px; }
-.player-subtitles.size-big .player-subtitles-text { font-size: 60px; }
+.player-subtitles.size-small .player-subtitles-text { font-size: 38px; }
+.player-subtitles.size-normal .player-subtitles-text { font-size: 46px; }
+.player-subtitles.size-big .player-subtitles-text { font-size: 58px; }
 
-.player-subtitles.color-white .player-subtitles-text { color: #ffffff; background: transparent; }
-.player-subtitles.color-yellow .player-subtitles-text { color: #f6e33f; background: transparent; }
+.player-subtitles.color-white .player-subtitles-text { color: #ffffff; background: rgba(0,0,0,.72); }
+.player-subtitles.color-yellow .player-subtitles-text { color: #f6e33f; background: rgba(0,0,0,.72); }
 .player-subtitles.color-black .player-subtitles-text { color: #ffffff; background: #000000; -webkit-text-stroke: 0; }
 
 /* =============================================================================
@@ -4047,6 +4102,11 @@ div, section, span { outline: none; }
 }
 .player-channels .pc-list {
   top: 132px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.player-channels .pc-list::-webkit-scrollbar {
+  display: none;
 }
 
 /* Special Addon row in channel list */
@@ -4086,9 +4146,9 @@ div, section, span { outline: none; }
   top: 0;
   width: 1920px;
   height: 1080px;
-  background: rgba(0, 0, 0, 0.78);
+  background: rgba(0, 0, 0, 0.85);
   display: none;
-  z-index: 60;
+  z-index: 250;
 }
 .dialog-addons-overlay.is-active {
   display: block;

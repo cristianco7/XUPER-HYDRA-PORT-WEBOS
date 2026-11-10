@@ -219,6 +219,9 @@ function buildArgs(e, t, r, o, n) {
         a || !1 === o.bsf || u.push("-bsf:a", "aac_adtstoasc"),
         a || u.push("-avoid_negative_ts", "make_zero")),
     e.hevc && !a && u.push("-tag:v", "hvc1"),
+    /* Entrega cada paquete al instante: el <video> recibe el primer fragmento
+       antes y el tiempo de arranque tras un seek se reduce. */
+    u.push("-flush_packets", "1"),
     a
       ? u.push("-mpegts_flags", "+resend_headers", "-f", "mpegts", "pipe:1")
       : u.push(

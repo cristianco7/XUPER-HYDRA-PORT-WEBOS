@@ -1,9 +1,9 @@
 {
-  "version": "3.0.4",
+  "version": "3.0.5",
   "name": "XuperTV",
   "minWebos": "1.0.0",
-  "ipkUrl": "https://github.com/cristianco7/XUPER-HYDRA-PORT-WEBOS/releases/download/v3.0.4/com.webosflux.xuptertv.fidelity_3.0.4_all.ipk",
-  "sha256": "EF57F27F5C67E48E96B0FE3C15F72DA0547F5AFD528D6F9F3C164982F045578F",
-  "changelog": "Versión 3.0.4: buffer de seguridad HLS de 15 segundos para canales 24/7. El proxy entrega un colchón de 3 segmentos que absorbe los desfases de fotogramas del transcodificador, eliminando los micro-saltos de escena.",
+  "ipkUrl": "https://github.com/cristianco7/XUPER-HYDRA-PORT-WEBOS/releases/download/v3.0.5/com.webosflux.xuptertv.fidelity_3.0.5_all.ipk",
+  "sha256": "8913569C74D2AD88803F27EBCB7789B2E6C8BFAB6583A9B38CF741B52A9BAED6",
+  "changelog": "Versión 3.0.5: Soporte completo para control Magic Remote en toda la aplicación (hover sincronizado, clics en botones y fondos, rueda de scroll en listas y rieles). Corrección del diálogo de Addons que aparecía detrás de categorías e impedía bajar o seleccionar elementos. Búsqueda inteligente: catálogo popular ordenado por popularidad real, sugerencias de títulos en vivo al escribir, barra de búsqueda interactiva compatible con teclado en pantalla de webOS y escritura directa desde teclado o control. Modo Fluido: al buscar muestra de inmediato la posición destino, el reloj ya no se reinicia y el salto rápido ±10 s funciona reiniciando el relay en la posición elegida y conservando la pista de audio. Corregido el reinicio del relay al adelantar (la petición de abort podía matar el nuevo ffmpeg y devolver el vídeo al principio) y la reanudación tras pausa ahora es instantánea, reiniciando el relay solo si el vídeo no avanza. Nuevo addon y categoría 'DirecTV / ESPN' en TV en vivo, con DSports y señales ESPN de Latinoamérica. Corregido el foco al entrar por primera vez a la vista previa de una serie (los botones se reconstruían y el control remoto quedaba sin respuesta). Subtítulos con estilo Netflix (caja negra semitransparente), apagados por defecto y con estado recordado: si el espectador los activa se mantienen hasta que los desactive. Títulos de 'Quizás te guste' y botones de temporada/capítulo más grandes; navegación más fluida en TVs lentas.",
   "releaseDate": "2026-11-09"
 }
