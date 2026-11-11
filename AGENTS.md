@@ -106,6 +106,7 @@ Antes de entregar cualquier cambio que afecte la app, comprobar:
 13. Que el modo fluido fMP4 se mantenga en todas las versiones con su watchdog anti-pantalla-negra.
 14. Que TV en vivo mantenga favoritos (`liveFavorites`), botones de cabecera (`f-fav`, `f-all`, `f-srch`), tecla amarilla y foco al primer canal visible (ver sección 7).
 15. Que el carrusel de catálogo mantenga rieles `.catalog-rail` y loop horizontal de retorno estilo Netflix (ver sección 7).
+16. Que la reproducción en vivo no intente forzar seeks ni alterar `currentTime` en canales 24/7 (ver sección 7).
 
 Si una tarea visual requiere tocar alguna de estas rutas o módulos protegidos,
 detenerse y pedir autorización explícita al usuario antes de hacerlo.
@@ -212,6 +213,10 @@ Los controles de navegación de canales en vivo, el sistema de favoritos y el ca
    - El botón **Todos** (`selectAllLiveChannels`) restaura la lista completa de canales sin forzar la apertura del modal de categorías.
    - **Estabilidad de foco:** Al aplicar filtros de categorías o búsquedas por texto, el foco del cursor debe posicionarse automáticamente en el primer canal visible (`visibleLiveIndexes()[0]`), impidiendo que el foco quede en el vacío o se descoloque la lista.
    - Al navegar verticalmente en la lista de canales, el foco no debe saltar bruscamente ni reordenar los elementos.
+3. **Reproducción Continua de Canales 24/7 y Prohibición de Seek en Vivo:**
+   - En canales 24/7 y cualquier emisión de TV en vivo (`X.playerMode === "live"`), **JAMÁS se debe alterar `currentTime` ni forzar seeks automáticos** (por ejemplo, retrasos de latencia como `liveLatencyGuard` o saltos artificiales).
+   - En el reproductor nativo HTML5 de webOS, intentar hacer seek o modificar la posición de reproducción en una emisión live HLS/TS destruye la sincronización del demuxer nativo de Starfish y dispara `MEDIA_ERR_DECODE` (`err=3`), congelando la imagen y dejando el canal trabado.
+   - La transmisión en vivo debe correr de forma fluida y natural al ritmo del proxy local sin manipulaciones de tiempo.
 
 ### Contrato obligatorio del Carrusel de Películas y Series (Estilo Netflix):
 1. **Rieles horizontales de catálogo (`.catalog-rail`):**

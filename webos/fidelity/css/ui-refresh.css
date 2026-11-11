@@ -624,3 +624,109 @@
   letter-spacing: .4px;
   color: #5f6874;
 }
+
+/* =============================================================================
+   CATALOG FILTER DIALOG (tipo + géneros de películas y series)
+   ============================================================================= */
+.catalog-filter-dialog {
+  position: absolute;
+  left: 0; top: 0;
+  width: 1920px; height: 1080px;
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-box-align: center;
+  -ms-flex-align: center;
+  align-items: center;
+  -webkit-box-pack: center;
+  -ms-flex-pack: center;
+  justify-content: center;
+  background: rgba(2, 4, 8, .86);
+  z-index: 600;
+}
+.catalog-filter-card {
+  width: 1320px;
+  max-height: 960px;
+  padding: 34px 44px 26px 44px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, .14);
+  background: -webkit-linear-gradient(top, #171d27 0%, #080b10 100%);
+  background: linear-gradient(to bottom, #171d27 0%, #080b10 100%);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, .85);
+}
+.catalog-filter-card::-webkit-scrollbar { display: none; }
+.catalog-filter-title {
+  font-size: 42px;
+  line-height: 52px;
+  font-weight: bold;
+  color: #ffffff;
+}
+.catalog-filter-sub {
+  margin-top: 6px;
+  font-size: 24px;
+  line-height: 32px;
+  color: rgba(255, 255, 255, .6);
+}
+.catalog-filter-section-label {
+  margin: 26px 0 14px 0;
+  font-size: 20px;
+  line-height: 26px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #8fe9ff;
+}
+.catalog-filter-options,
+.catalog-filter-genres {
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-box-lines: multiple;
+  -ms-flex-wrap: wrap;
+  flex-wrap: wrap;
+  -webkit-box-align: center;
+  -ms-flex-align: center;
+  align-items: center;
+}
+.catalog-filter-genres { max-height: 480px; overflow-y: auto; overflow-x: hidden; padding-right: 4px; }
+.catalog-filter-genres::-webkit-scrollbar { display: none; }
+.catalog-filter-option {
+  height: 58px;
+  padding: 0 24px;
+  margin: 0 14px 12px 0;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, .18);
+  background: rgba(255, 255, 255, .08);
+  color: #ffffff;
+  font-size: 24px;
+  line-height: 56px;
+  white-space: nowrap;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+.catalog-filter-genre {
+  /* Ancho fijo: garantiza 5 columnas reales para que la navegación con el
+     control remoto (arriba/abajo en saltos de 5) coincida con lo que se ve. */
+  width: 210px;
+  min-width: 0;
+  max-width: 210px;
+  padding: 0 12px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.catalog-filter-option.is-focused {
+  background: #d21525;
+  border-color: #ffffff;
+  box-shadow: 0 0 0 3px #ffffff;
+  color: #ffffff;
+  font-weight: bold;
+}
+.catalog-filter-empty {
+  font-size: 24px;
+  line-height: 34px;
+  color: rgba(255, 255, 255, .55);
+}
