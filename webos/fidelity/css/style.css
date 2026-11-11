@@ -1039,19 +1039,24 @@ div, section, span { outline: none; }
   line-height: 36px;
   color: #c91923;
   background: #000000;
-  padding-left: 4px;
+  padding-left: 10px;
 }
 /* Expanded synopsis: the APK grows the clickable TextView in place; here it
    overlays the button row so the layout below is not pushed off-screen. */
 #screen-detail.is-synopsis-open .detail-left { z-index: 6; }
 #screen-detail.is-synopsis-open .detail-synopsis {
   position: absolute;
-  left: 0; top: 339px;
+  /* El panel crece hacia arriba y se detiene antes de la fila de botones
+     (Pantalla completa / Idioma / Favorito), que empieza en y=452. */
+  left: 0; top: 120px;
   width: 806px;
   height: auto;
-  max-height: 300px;
-  padding-bottom: 8px;
+  max-height: 280px;
+  padding: 8px 18px 8px 0;
+  overflow-y: auto;
   background: #000000;
+  box-sizing: border-box;
+  z-index: 4;
 }
 #screen-detail.is-synopsis-open .detail-synopsis .text { max-height: none; }
 
@@ -1156,7 +1161,8 @@ div, section, span { outline: none; }
 .detail-seasons-rail {
   position: absolute;
   left: 80px; top: 8px;
-  max-width: 600px; height: 54px;
+  right: 80px;
+  height: 56px;
   display: -webkit-box;
   display: flex;
   overflow-x: auto;
@@ -1581,7 +1587,7 @@ div, section, span { outline: none; }
   color: #ffffff;
 }
 .search-hot-total span { color: #FFAA00; font-weight: bold; }
-.search-grid { position: absolute; left: 63px; top: 172px; width: 1260px; height: 880px; }
+.search-grid { position: absolute; left: 63px; top: 184px; width: 1260px; height: 868px; }
 
 .search-results { position: absolute; left: 600px; top: 0; width: 1320px; height: 1080px; display: none; overflow-y: auto; overflow-x: hidden; }
 .search-results.is-active { display: block; }
@@ -1599,9 +1605,9 @@ div, section, span { outline: none; }
 .search-suggestions {
   position: absolute;
   left: 63px;
-  top: 122px;
+  top: 110px;
   width: 1220px;
-  height: 42px;
+  height: 64px;
   display: none;
   align-items: center;
   overflow-x: auto;
@@ -1613,25 +1619,30 @@ div, section, span { outline: none; }
 }
 .search-suggestions::-webkit-scrollbar { display: none; }
 .search-sug-label {
-  font-size: 20px;
+  font-size: 26px;
   font-weight: bold;
   color: #ffaa00;
-  margin-right: 12px;
+  margin-right: 16px;
+  line-height: 60px;
   flex-shrink: 0;
 }
 .search-sug-chip {
   display: inline-block;
-  padding: 6px 16px;
-  margin-right: 10px;
+  height: 54px;
+  line-height: 50px;
+  padding: 0 26px;
+  margin-right: 14px;
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 20px;
+  border-radius: 27px;
   color: #e0e0e0;
-  font-size: 20px;
+  font-size: 24px;
+  font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
   outline: none;
+  box-sizing: border-box;
   transition: all 0.15s ease;
 }
 .search-sug-chip.is-focused,
@@ -1733,15 +1744,15 @@ div, section, span { outline: none; }
 .sp-title.plain { font-weight: normal; }
 .sp-global-note {
   position: absolute;
-  left: 52px; top: 145px;
+  left: 52px; top: 126px;
   right: 70px;
-  font-size: 24px;
-  line-height: 34px;
+  font-size: 22px;
+  line-height: 32px;
   color: #9ca6b3;
 }
 .sp-hr {
   position: absolute;
-  left: 0; right: 0; top: 160px;
+  left: 0; right: 0; top: 168px;
   height: 1px;
   background: rgba(255,255,255,.29);  /* color_4affffff */
 }
@@ -1800,18 +1811,18 @@ div, section, span { outline: none; }
 .pb-opt.is-checked { background: linear-gradient(135deg, #7d1017 0%, #4f1519 100%); box-shadow: inset 0 0 0 1px rgba(255,255,255,.2); }
 
 .sp-subtitle-h {
-  position: absolute; left: 52px; top: 593px;
-  width: 212px; height: 51px;
-  font-size: 40px; line-height: 51px; font-weight: bold; color: #ffffff;
+  position: absolute; left: 52px; top: 496px;
+  width: 200px; height: 46px;
+  font-size: 34px; line-height: 46px; font-weight: bold; color: #ffffff;
 }
 .sp-switch {
   position: absolute;
-  left: 264px; top: 593px;
-  width: 106px; height: 51px;       /* 106px x 51px */
+  left: 264px; top: 496px;
+  width: 106px; height: 46px;
   background-position: center center;
   background-repeat: no-repeat;
   background-size: 96px 38px;
-  border-radius: 30px;
+  border-radius: 23px;
 }
 .sp-switch.on  { background-image: url(../assets/original/settings/icon_subtitle_switch_on.png); }
 .sp-switch.off { background-image: url(../assets/original/settings/icon_subtitle_switch_off.png); }
@@ -4364,8 +4375,8 @@ div, section, span { outline: none; }
    ============================================================================= */
 .dg-note {
   position: absolute;
-  left: 52px; top: 145px; right: 90px;
-  font-size: 24px;
+  left: 52px; top: 126px; right: 90px;
+  font-size: 22px;
   line-height: 32px;
   color: #9ca6b3;
 }
@@ -4394,32 +4405,48 @@ div, section, span { outline: none; }
 .dg-summary.warn { color: #f2a33c; }
 .dg-summary.bad { color: #e5484d; }
 
-.dg-head {
+.dg-head,
+.dg-row {
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-box-align: center;
+  -ms-flex-align: center;
+  align-items: center;
+  width: 100%;
   white-space: nowrap;
-  font-size: 21px;
-  line-height: 40px;
+  box-sizing: border-box;
+}
+
+.dg-head {
+  height: 44px;
+  line-height: 44px;
+  font-size: 22px;
   color: #858d94;
   border-bottom: 1px solid rgba(255,255,255,.24);
 }
 .dg-head span,
 .dg-row span {
-  display: inline-block;
-  vertical-align: top;
+  display: block;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+  padding-right: 16px;
+  box-sizing: border-box;
 }
-.dg-host { width: 470px; }
-.dg-local { width: 330px; }
-.dg-state { width: 190px; }
-.dg-ip { width: 390px; }
+.dg-host { width: 440px; min-width: 440px; flex: 0 0 440px; }
+.dg-local { width: 320px; min-width: 320px; flex: 0 0 320px; }
+.dg-state { width: 200px; min-width: 200px; flex: 0 0 200px; }
+.dg-ip { -webkit-box-flex: 1; flex: 1; min-width: 0; }
 
 .dg-list {
   overflow-y: auto;
   overflow-x: hidden;
 }
 .dg-report {
-  height: 450px;
+  height: auto;
+  min-height: 340px;
+  max-height: 392px;
   padding: 16px 22px;
   overflow-y: auto;
   overflow-x: hidden;
@@ -4433,8 +4460,8 @@ div, section, span { outline: none; }
   border-left: 3px solid #d21525;
 }
 .dg-row {
-  height: 44px;
-  line-height: 44px;
+  height: 46px;
+  line-height: 46px;
   font-size: 21px;
   color: #d8dee6;
   border-bottom: 1px solid rgba(255,255,255,.08);
@@ -4447,8 +4474,8 @@ div, section, span { outline: none; }
 .dg-row.bad .dg-state { color: #e5484d; }
 
 .dg-foot {
-  font-size: 21px;
-  line-height: 29px;
+  font-size: 20px;
+  line-height: 28px;
   color: #858d94;
 }
 

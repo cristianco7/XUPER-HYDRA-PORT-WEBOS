@@ -1076,27 +1076,23 @@
 .section-grid::-webkit-scrollbar { display: none; }
 .section-grid { scrollbar-width: none; -ms-overflow-style: none; }
 
-/* Riel horizontal de temporadas y desplazamiento de capítulos en detalle */
+/* Riel horizontal de temporadas: ocupa todo el ancho hasta el margen derecho sin recortar temporadas 4+ */
 .detail-seasons-rail {
   position: absolute;
-  left: 80px; top: 10px;
-  max-width: 600px; height: 42px;
+  left: 80px; top: 8px;
+  right: 80px;
+  height: 56px;
   display: -webkit-box;
   display: flex;
   overflow-x: auto;
   overflow-y: hidden;
   white-space: nowrap;
 }
-/* Rango de capítulos y pestañas */
-.detail-seasons-rail,
-.detail-ranges {
-  top: 10px;
-  height: 42px;
-}
+/* Rango de capítulos: se activa en series de 1 sola temporada con muchos capítulos (One Piece, Naruto) */
 .detail-ranges {
   position: absolute;
-  left: 280px;
-  right: 80px;
+  top: 8px;
+  height: 56px;
   display: -webkit-box;
   display: flex;
   flex-direction: row;
@@ -1104,25 +1100,43 @@
   overflow-y: hidden;
   white-space: nowrap;
 }
-.detail-ranges.no-seasons {
-  left: 80px;
-}
 .detail-range {
-  height: 38px;
-  padding: 0 16px;
-  margin-right: 10px;
-  border-radius: 8px;
-  font-size: 20px;
-  line-height: 36px;
+  display: inline-block;
+  height: 52px;
+  line-height: 50px;
+  padding: 0 24px;
+  margin-right: 12px;
+  border-radius: 10px;
+  font-size: 24px;
+  font-weight: 500;
   flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(0, 0, 0, 0.6);
+  color: #e0e0e0;
+  cursor: pointer;
+  box-sizing: border-box;
 }
-/* La fila de episodios se ubica debajo de los rangos dejando espacio limpio para las recomendaciones */
+.detail-range.is-selected {
+  border-color: #e4a434;
+  color: #ffffff;
+  background: rgba(228, 164, 52, 0.22);
+  font-weight: bold;
+}
+.detail-range.is-focused {
+  border-color: #e4a434;
+  outline: 2px solid #e4a434;
+  outline-offset: 1px;
+  background: #e4a434;
+  color: #000000;
+  font-weight: bold;
+}
+/* La fila de episodios se ubica debajo de las temporadas con botones más grandes y cómodos */
 .detail-episodes {
   position: absolute;
   left: 80px;
   right: 80px;
-  top: 60px;
-  height: 50px;
+  top: 72px;
+  height: 66px;
   display: -webkit-box;
   display: flex;
   flex-direction: row;
@@ -1131,15 +1145,16 @@
   white-space: nowrap;
 }
 .detail-episode {
-  width: 90px;
-  height: 46px;
-  margin-right: 8px;
-  border-radius: 8px;
+  width: 112px;
+  height: 60px;
+  margin-right: 12px;
+  border-radius: 12px;
   flex-shrink: 0;
 }
 .detail-episode .ep-num {
-  line-height: 44px;
-  font-size: 23px;
+  line-height: 58px;
+  font-size: 28px;
+  font-weight: bold;
 }
 /* El selector permanece disponible desde Ajustes globales, pero no ocupa
    espacio en la previsualización de la ficha. */
@@ -1172,17 +1187,17 @@
    los botones para que ninguna capa se superponga. */
 .detail-left.no-credits .detail-synopsis {
   margin-top: 20px;
-  height: 128px;
+  height: 108px;
 }
 .detail-left.no-credits .detail-synopsis .text {
-  max-height: 126px;
+  max-height: 108px;
 }
 .detail-left.has-credits .detail-synopsis {
   margin-top: 12px;
-  height: 46px;
+  height: 36px;
 }
 .detail-left.has-credits .detail-synopsis .text {
-  max-height: 44px;
+  max-height: 36px;
 }
 /* La barra tiene exactamente el mismo ancho y borde derecho de la grilla de
    canales, por eso no queda flotando sobre la previsualización. */
@@ -1204,17 +1219,31 @@
 }
 .detail-season-btn {
   display: inline-block;
-  height: 42px;
-  padding: 0 20px;
-  margin-right: 10px;
+  height: 52px;
+  padding: 0 26px;
+  margin-right: 14px;
   border: 1px solid rgba(255, 255, 255, 0.28);
-  border-radius: 6px;
+  border-radius: 10px;
   background: rgba(0, 0, 0, 0.6);
   color: #e0e0e0;
-  font-size: 22px;
-  line-height: 40px;
+  font-size: 26px;
+  line-height: 50px;
   cursor: pointer;
   box-sizing: border-box;
+}
+.detail-season {
+  display: inline-block;
+  height: 52px;
+  padding: 0 24px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  box-sizing: border-box;
+}
+.detail-season .season-text {
+  font-size: 26px;
+  line-height: 50px;
+  color: #ffffff;
 }
 .detail-season-btn.is-selected {
   border-color: #e4a434;
