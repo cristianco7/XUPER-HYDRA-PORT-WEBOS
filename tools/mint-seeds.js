@@ -172,7 +172,7 @@ function probeProxy(proxy, cb) {
     if (done) return;
     done = true;
     cb(new Error("timeout"));
-  }, 7000);
+  }, 9000);
 
   magis.ensureSession(function (err) {
     if (done) return;
@@ -207,11 +207,11 @@ function ensureWorkingRoute(cb) {
       }
       log("reunidos " + list.length + " proxies candidatos de LatAm. Filtrando TCP CONNECT en paralelo...");
 
-      var candidates = list.slice(0, 60);
+      var candidates = list.slice(0, 150);
       var live = [];
       var tested = 0;
       candidates.forEach(function (p) {
-        testConnect(p, "cloudflare.com", 443, 3500, function (err3, ok) {
+        testConnect(p, "cloudflare.com", 443, 6000, function (err3, ok) {
           if (!err3 && ok) {
             live.push(p);
           }
