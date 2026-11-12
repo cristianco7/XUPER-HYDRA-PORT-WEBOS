@@ -4227,6 +4227,7 @@ div, section, span { outline: none; }
   padding: 24px 36px;
   overflow-y: auto;
   flex: 1;
+  min-height: 0;
 }
 .da-body::-webkit-scrollbar { display: none; }
 
@@ -4252,6 +4253,11 @@ div, section, span { outline: none; }
   padding: 12px 20px;
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.da-preset-item:hover {
+  background: #323640;
 }
 .da-preset-info {
   flex: 1;
@@ -4277,6 +4283,8 @@ div, section, span { outline: none; }
   cursor: pointer;
   outline: none;
   transition: all 0.15s;
+  position: relative;
+  z-index: 2;
 }
 .da-preset-btn.is-installed {
   background: rgba(46, 125, 50, 0.7);

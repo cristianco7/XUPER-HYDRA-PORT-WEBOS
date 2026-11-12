@@ -20,7 +20,7 @@ function arg(name, fallback) {
 
 var COUNT = Math.max(1, parseInt(arg("count", "30"), 10) || 30);
 var MAX = Math.max(1, parseInt(arg("max", "200"), 10) || 200);
-var TTL_HOURS = Math.max(1, parseFloat(arg("ttl-hours", "8")) || 8);
+var TTL_HOURS = Math.max(1, parseFloat(arg("ttl-hours", "7")) || 7);
 var POOL_FILE = path.resolve(arg("pool", path.join(__dirname, "..", "dist", "seeds", "seeds.json")));
 var OUT_FILE = path.resolve(arg("out", POOL_FILE));
 
