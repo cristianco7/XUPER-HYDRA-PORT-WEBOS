@@ -1,6 +1,6 @@
 !(function () {
   "use strict";
-  var APP_VERSION = "3.0.10";
+  var APP_VERSION = "3.0.9";
   function e(e, t, a) {
     var i = document.createElement(e);
     return (t && (i.className = t), null != a && (i.textContent = a), i);
@@ -1600,13 +1600,11 @@
             if ("search" === X.screen) {
               try { if (me && me.blur) me.blur(); } catch (err) {}
               try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch (err) {}
-              try { window.focus(); } catch (err) {}
               Da();
               lt("home");
               var destTab = (typeof X.tab === "number" && X.tab >= 0) ? X.tab : 0;
-              bt(destTab, !0);
-              var curPage = document.querySelector(".home-page.is-current");
-              var homeTarget = (curPage && ot(curPage)) || (Ue && Ue[destTab]) || (Ue && Ue[0]) || ot(t("screen-home"));
+              bt(destTab, !1);
+              var homeTarget = (Ue && Ue[destTab]) || (Ue && Ue[0]) || ot(t("screen-home"));
               if (homeTarget) rt(homeTarget);
               return;
             }
@@ -1706,7 +1704,7 @@
       return (vt(), void (e.preventDefault && e.preventDefault()));
     if ("search" === X.screen && !e.ctrlKey && !e.altKey && !e.metaKey) {
       if (8 === t || "Backspace" === a) {
-        if ((document.activeElement === me || X.focus === me) && X.searchQuery && X.searchQuery.length > 0) {
+        if (X.searchQuery && X.searchQuery.length > 0) {
           Aa(X.searchQuery.slice(0, -1));
           return void (e.preventDefault && e.preventDefault());
         }
@@ -1724,11 +1722,10 @@
         return void (e.preventDefault && e.preventDefault());
       }
     }
-    if ("search" === X.screen && (461 === t || 27 === t || 8 === t || "Back" === a || "GoBack" === a || "Escape" === a)) {
+    if ("search" === X.screen && (461 === t || 27 === t || "Back" === a || "GoBack" === a || "Escape" === a)) {
       if (document.activeElement === me || X.focus === me) {
         try { if (me && me.blur) me.blur(); } catch (err) {}
         try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch (err) {}
-        try { window.focus(); } catch (err) {}
         var firstResult = ot(he);
         var firstSug = t("search-suggestions") ? ot(t("search-suggestions")) : null;
         var nextTarget = firstResult || firstSug || (Be && Be[0]);
@@ -2515,22 +2512,13 @@
                     a ? rt(a) : Fe.length ? rt(Fe[0]) : ne && rt(ne);
                   } else if (z[e].page >= 0) {
                     var i = ot(He[z[e].page]);
-                    if (!i) {
-                      mt(z[e].page);
-                      i = ot(He[z[e].page]);
-                    }
-                    if (i) rt(i);
-                    else {
-                      var anyFoc = ot(t("screen-home"));
-                      if (anyFoc && anyFoc !== Ue[e]) rt(anyFoc);
-                    }
+                    i && rt(i);
                   }
                   return !0;
                 }
                 return !1;
               };
             })(n)),
-            bindMagicActivate(r),
             i.appendChild(r),
             Ue.push(r));
         }
@@ -2593,7 +2581,6 @@
                 return "up" === t;
               };
             })(i)),
-            bindMagicActivate(r),
             te.appendChild(r));
         }
         var s = e("div", "notify-divider");
@@ -2768,7 +2755,6 @@
       (l._activate = function () {
         ba(t);
       }),
-      bindMagicActivate(l),
       wt(),
       l
     );
@@ -3870,68 +3856,58 @@
       s++
     )
       o[r[s].url] = !0;
-    var presetBtns = [];
     if (i) {
       a(i);
       for (var l = 0; l < Tt.length; l++)
         (function (t) {
-          var itemEl = e("div", "da-preset-item"),
-            infoEl = e("div", "da-preset-info");
-          (infoEl.appendChild(e("div", "da-preset-name", t.name)),
-            infoEl.appendChild(e("div", "da-preset-desc", t.desc)),
-            itemEl.appendChild(infoEl));
-          var isInst = !!o[t.url],
-            btn = e(
+          var a = e("div", "da-preset-item"),
+            n = e("div", "da-preset-info");
+          (n.appendChild(e("div", "da-preset-name", t.name)),
+            n.appendChild(e("div", "da-preset-desc", t.desc)),
+            a.appendChild(n));
+          var r = !!o[t.url],
+            s = e(
               "button",
-              "da-preset-btn focusable" + (isInst ? " is-installed" : ""),
-              isInst ? "✔ Instalado" : "+ Instalar"
+              "da-preset-btn focusable" + (r ? " is-installed" : ""),
+              r ? "✔ Instalado" : "+ Instalar"
             );
-          var doInstall = function () {
-            if (isInst) return;
-            btn.textContent = "Instalando…";
-            ca(t, function (err, res) {
-              if (err) {
-                btn.textContent = "Error";
-                setTimeout(function () {
-                  btn.textContent = "+ Instalar";
-                }, 2e3);
-              } else {
-                da();
-                if (Mt && Mt.isAddon) $t();
-              }
-            });
-          };
-          btn._activate = doInstall;
-          bindMagicActivate(btn);
-          itemEl._activate = doInstall;
-          bindMagicActivate(itemEl);
-          itemEl.appendChild(btn);
-          i.appendChild(itemEl);
-          presetBtns.push(btn);
+          ((s._activate = function () {
+            r ||
+              ((s.textContent = "Instalando…"),
+              ca(t, function (e, t) {
+                e
+                  ? ((s.textContent = "Error"),
+                    setTimeout(function () {
+                      s.textContent = "+ Instalar";
+                    }, 2e3))
+                  : (da(), Mt && Mt.isAddon && $t());
+              }));
+          }),
+            bindMagicActivate(s),
+            a.appendChild(s),
+            i.appendChild(a));
         })(Tt[l]);
     }
-    var delBtns = [];
-    if (n) {
+    if (n)
       if ((a(n), r.length))
         for (var d = 0; d < r.length; d++)
-          (function (t, aIdx) {
-            var itemEl = e("div", "da-installed-item"),
-              infoEl = e("div", "da-installed-info"),
-              nameEl = e("div", "da-preset-name", t.name),
-              descEl = e(
+          (function (t, a) {
+            var i = e("div", "da-installed-item"),
+              o = e("div", "da-installed-info"),
+              s = e("div", "da-preset-name", t.name),
+              l = e(
                 "div",
                 "da-preset-desc",
                 (t.count ? t.count + " canales • " : "") + t.url
               );
-            (infoEl.appendChild(nameEl), infoEl.appendChild(descEl), itemEl.appendChild(infoEl));
-            var delBtn = e("button", "da-del-btn focusable", "Eliminar");
-            delBtn._activate = function () {
-              (r.splice(aIdx, 1), kt(r), da(), Mt && Mt.isAddon && $t());
-            };
-            bindMagicActivate(delBtn);
-            itemEl.appendChild(delBtn);
-            n.appendChild(itemEl);
-            delBtns.push(delBtn);
+            (o.appendChild(s), o.appendChild(l), i.appendChild(o));
+            var d = e("button", "da-del-btn focusable", "Eliminar");
+            ((d._activate = function () {
+              (r.splice(a, 1), kt(r), da(), Mt && Mt.isAddon && $t());
+            }),
+              bindMagicActivate(d),
+              i.appendChild(d),
+              n.appendChild(i));
           })(r[d], d);
       else
         n.appendChild(
@@ -3941,127 +3917,39 @@
             "No hay addons personalizados instalados aún. Instala una lista recomendada arriba o escribe una URL."
           )
         );
-    }
-    var customInput = t("da-custom-url");
-    var customBtn = t("da-btn-add-custom");
-    if (customBtn) {
-      customBtn._activate = function () {
-        var a = customInput ? (customInput.value || "").trim() : "";
+    var c = t("da-btn-add-custom");
+    if (c) {
+      c._activate = function () {
+        var e = t("da-custom-url"),
+          a = e ? (e.value || "").trim() : "";
         a && /^https?:\/\//i.test(a)
-          ? ((customBtn.textContent = "Descargando…"),
+          ? ((c.textContent = "Descargando…"),
             ca(
               {
                 id: "custom_" + Date.now(),
                 name: "Lista Personalizada",
                 url: a,
               },
-              function (err, res) {
-                ((customBtn.textContent = "Agregar"),
-                  err
-                    ? alert("No se pudo cargar la lista M3U: " + err)
-                    : (customInput && (customInput.value = ""), da(), Mt && Mt.isAddon && $t()));
+              function (t, a) {
+                ((c.textContent = "Agregar"),
+                  t
+                    ? alert("No se pudo cargar la lista M3U: " + t)
+                    : (e && (e.value = ""), da(), Mt && Mt.isAddon && $t()));
               }
             ))
           : alert("Por favor introduce una URL válida (http:// o https://)");
       };
-      bindMagicActivate(customBtn);
+      bindMagicActivate(c);
     }
     /* Al pulsar este campo con el Magic Remote se abre el teclado virtual de
        webOS. También se puede activar con OK sin perder la navegación D-pad. */
-    bindMagicTextInput(customInput);
-    var exitBtn = t("da-btn-exit");
-    if (exitBtn) {
-      exitBtn._activate = function () {
+    bindMagicTextInput(t("da-custom-url"));
+    var p = t("da-btn-exit");
+    if (p) {
+      p._activate = function () {
         la();
       };
-      bindMagicActivate(exitBtn);
-    }
-
-    for (var pIdx = 0; pIdx < presetBtns.length; pIdx++) {
-      (function(idx) {
-        presetBtns[idx]._onMove = function (dir) {
-          if ("up" === dir) {
-            if (idx > 0) { rt(presetBtns[idx - 1]); return !0; }
-            return !0;
-          }
-          if ("down" === dir) {
-            if (idx + 1 < presetBtns.length) { rt(presetBtns[idx + 1]); return !0; }
-            if (customInput) { rt(customInput); return !0; }
-            if (customBtn) { rt(customBtn); return !0; }
-            if (delBtns.length) { rt(delBtns[0]); return !0; }
-            if (exitBtn) { rt(exitBtn); return !0; }
-            return !0;
-          }
-          return !1;
-        };
-      })(pIdx);
-    }
-    if (customInput) {
-      customInput._onMove = function (dir) {
-        if ("up" === dir) {
-          if (presetBtns.length) { rt(presetBtns[presetBtns.length - 1]); return !0; }
-          return !0;
-        }
-        if ("right" === dir) {
-          if (customBtn) { rt(customBtn); return !0; }
-          return !0;
-        }
-        if ("down" === dir) {
-          if (delBtns.length) { rt(delBtns[0]); return !0; }
-          if (exitBtn) { rt(exitBtn); return !0; }
-          return !0;
-        }
-        return !1;
-      };
-    }
-    if (customBtn) {
-      customBtn._onMove = function (dir) {
-        if ("left" === dir) {
-          if (customInput) { rt(customInput); return !0; }
-          return !0;
-        }
-        if ("up" === dir) {
-          if (presetBtns.length) { rt(presetBtns[presetBtns.length - 1]); return !0; }
-          return !0;
-        }
-        if ("down" === dir) {
-          if (delBtns.length) { rt(delBtns[0]); return !0; }
-          if (exitBtn) { rt(exitBtn); return !0; }
-          return !0;
-        }
-        return !1;
-      };
-    }
-    for (var dIdx = 0; dIdx < delBtns.length; dIdx++) {
-      (function(idx) {
-        delBtns[idx]._onMove = function (dir) {
-          if ("up" === dir) {
-            if (idx > 0) { rt(delBtns[idx - 1]); return !0; }
-            if (customBtn) { rt(customBtn); return !0; }
-            if (customInput) { rt(customInput); return !0; }
-            if (presetBtns.length) { rt(presetBtns[presetBtns.length - 1]); return !0; }
-            return !0;
-          }
-          if ("down" === dir) {
-            if (idx + 1 < delBtns.length) { rt(delBtns[idx + 1]); return !0; }
-            if (exitBtn) { rt(exitBtn); return !0; }
-            return !0;
-          }
-          return !1;
-        };
-      })(dIdx);
-    }
-    if (exitBtn) {
-      exitBtn._onMove = function (dir) {
-        if ("up" === dir) {
-          if (delBtns.length) { rt(delBtns[delBtns.length - 1]); return !0; }
-          if (customBtn) { rt(customBtn); return !0; }
-          if (customInput) { rt(customInput); return !0; }
-          if (presetBtns.length) { rt(presetBtns[presetBtns.length - 1]); return !0; }
-          return !0;
-        }
-        return !1;
-      };
+      bindMagicActivate(p);
     }
   }
   function ca(e, t) {
@@ -4129,7 +4017,6 @@
         (l._activate = function () {
           ba(t);
         }),
-      bindMagicActivate(l),
       wt(),
       l
     );
@@ -4445,7 +4332,6 @@
         (moreCard._activate = function () {
           openCatalogSection(r, a, sectionInfo);
         }),
-        bindMagicActivate(moreCard),
         (moreCard._onMove = railMove(l, d)),
         (moreCard._onFocus = function () {
           revealRailCard(l, moreCard);
@@ -4966,7 +4852,6 @@
       (se._activate = function () {
         Kr(n, X.detailEpisode);
       }),
-      bindMagicActivate(se),
       (se._onMove = function () {
         /* Nunca dejar el foco atrapado en la carátula del reproductor: si el
            espectador pulsa cualquier dirección, pasa a los botones. */
@@ -5023,7 +4908,6 @@
             }
           };
         })(T[_].kind, n)),
-        bindMagicActivate(k),
         le.appendChild(k));
     }
     var M = e("div", "detail-btn detail-smooth-toggle focusable"),
@@ -5042,7 +4926,6 @@
           (E.textContent =
             "smooth" === X.streamMode ? "Modo fluido: Sí" : "Modo fluido: No"));
       }),
-      bindMagicActivate(M),
       le.appendChild(M),
       (function (t) {
         var a = x(t) && t.episodes ? t.episodes : [],
@@ -5101,7 +4984,6 @@
                     });
                   }
                 };
-                bindMagicActivate(sBtn);
                 sBtn._onMove = function (dir) {
                   if ("left" === dir) {
                     if (sNum > 0 && seasonsRail.children[sNum - 1]) {
@@ -5165,7 +5047,6 @@
               rangeBtn._activate = function () {
                 Sa(rangeIdx, t);
               };
-              bindMagicActivate(rangeBtn);
               rangeBtn._onMove = function (dir) {
                 if ("left" === dir) {
                   if (rangeIdx > 0 && rangesCont.children[rangeIdx - 1]) {
@@ -5215,7 +5096,6 @@
               epTile._activate = function () {
                 $n(t, epData);
               };
-              bindMagicActivate(epTile);
               epTile._onFocus = function () {
                 if (u) {
                   var cLeft = u.scrollLeft,
@@ -5513,19 +5393,12 @@
   }
   function ka(t, a) {
     var n = e("div", "search-cell");
-    i(n, (a % 5) * 246, 437 * Math.floor(a / 5), 246, 437);
-    var pEl = xt(t, 0, 0, 222, 329, { gold: !0 });
-    n.appendChild(pEl);
-    var nameEl = e("div", "s-name", t.title);
-    nameEl.style.cursor = "pointer";
-    nameEl.onclick = function (ev) {
-      if (ev && ev.preventDefault) ev.preventDefault();
-      rt(pEl);
-      if (pEl._activate) pEl._activate();
-      return !1;
-    };
-    n.appendChild(nameEl);
-    return n;
+    return (
+      i(n, (a % 5) * 246, 437 * Math.floor(a / 5), 246, 437),
+      n.appendChild(xt(t, 0, 0, 222, 329, { gold: !0 })),
+      n.appendChild(e("div", "s-name", t.title)),
+      n
+    );
   }
   function closeCatalogFilter() {
     var e = catalogFilterDialog;
@@ -5713,29 +5586,8 @@
     var sugContainer = t("search-suggestions");
     if (!sugContainer) return;
     a(sugContainer);
-    if (!query || !query.trim()) {
-      var popItems = Ma().slice(0, 5);
-      if (!popItems.length) {
-        sugContainer.classList.remove("is-active");
-        return;
-      }
-      sugContainer.classList.add("is-active");
-      var lblPop = e("span", "search-sug-label", "🔥 Populares:");
-      sugContainer.appendChild(lblPop);
-      for (var pIdx = 0; pIdx < popItems.length; pIdx++) {
-        (function (sugTitle) {
-          var chip = e("button", "search-sug-chip focusable", sugTitle);
-          chip._activate = function () {
-            Aa(sugTitle);
-            setTimeout(function () {
-              var target = ot(he);
-              if (target) rt(target);
-            }, 60);
-          };
-          bindMagicActivate(chip);
-          sugContainer.appendChild(chip);
-        })(popItems[pIdx].title);
-      }
+    if (!query || query.length < 2) {
+      sugContainer.classList.remove("is-active");
       return;
     }
     var cleanQ = o(query.trim());
@@ -5750,13 +5602,7 @@
         var baseKey = cleanTitle.replace(/[^a-z0-9]/g, "");
         if (!seenTitles[baseKey]) {
           seenTitles[baseKey] = !0;
-          var sScore = (0 === idx ? 150 : 60);
-          var numScore = parseFloat(itm.score) || 0;
-          sScore += numScore * 15;
-          var y = parseInt(itm.year, 10) || 0;
-          if (y > 2020) sScore += (y - 2020) * 8;
-          var catKind = (String(itm.category || "") + " " + String(itm.kind || "")).toLowerCase();
-          if (/top|destacad|estreno|popular|cartelera|ranking/i.test(catKind)) sScore += 50;
+          var sScore = (0 === idx ? 100 : 50) + (parseFloat(itm.score) || 0) * 10;
           matches.push({ title: itm.title, score: sScore });
         }
       }
@@ -5764,7 +5610,7 @@
     matches.sort(function (a, b) {
       return b.score - a.score;
     });
-    var topSuggestions = matches.slice(0, 6);
+    var topSuggestions = matches.slice(0, 5);
     if (0 === topSuggestions.length) {
       sugContainer.classList.remove("is-active");
       return;
@@ -5777,10 +5623,6 @@
         var chip = e("button", "search-sug-chip focusable", sugTitle);
         chip._activate = function () {
           Aa(sugTitle);
-          setTimeout(function () {
-            var target = ot(he);
-            if (target) rt(target);
-          }, 60);
         };
         bindMagicActivate(chip);
         sugContainer.appendChild(chip);

@@ -20,9 +20,9 @@ var crypto = require("crypto"),
   ],
   PORTAL_CODE = "masnew",
   APP_ID = "com.android.msandroid",
-  APK_VERSION = "49920",
-  SPKG_VER = "2025-08-07 05:40:11_36_16_",
-  APK_VER_HEADER = "49920",
+  APK_VERSION = "49902",
+  SPKG_VER = "2024-09-10 06:25:30_33_13_",
+  APK_VER_HEADER = "43404",
   USER_AGENT = "okhttp/3.12.12",
   CONTENT_TYPE = "application/json;charset=utf-8",
   SNTOKEN_SALT = "ntFT65w6itH!lHCPw7D=@qnsFC5adD28",
@@ -36,8 +36,6 @@ var crypto = require("crypto"),
   SLB_TTL = 3e5,
   SEED_URL =
     "https://raw.githubusercontent.com/cristianco7/XUPER-HYDRA-PORT-WEBOS/seeds/seeds.json",
-  SEED_BACKUP_URL =
-    "https://raw.githubusercontent.com/xuper-plugin/kino-plugin-xuper/seeds/seeds.json",
   SEED_FILE = "/tmp/xuper-seeds.json",
   SEED_DEAD_FILE = "/tmp/xuper-seeds-dead.json",
   SEED_MAX = 200,
@@ -58,7 +56,6 @@ var crypto = require("crypto"),
     aaa100080: 1,
     aaa100082: 1,
     aaa100083: 1,
-    portal200001: 1,
   },
   SESSION_MAX_AGE_MS = 216e5,
   ROOT_CODES = {
@@ -658,22 +655,10 @@ function seedIsUsable(e) {
     !seedIsDead(e)
   );
 }
-function usableSeeds(includeExpired) {
-  for (var e = [], a = [], r = 0; r < seedPool.length; r++) {
-    var s = seedPool[r];
-    if (s && trim(s.userId) && trim(s.userToken) && !seedIsDead(s)) {
-      a.push(s);
-      if (
-        !("number" == typeof s.exp &&
-          s.exp > 0 &&
-          1e3 * s.exp - Date.now() < SEED_MIN_LIFE_MS)
-      ) {
-        e.push(s);
-      }
-    }
-  }
-  if (e.length) return e;
-  return includeExpired ? a : [];
+function usableSeeds() {
+  for (var e = [], r = 0; r < seedPool.length; r++)
+    seedIsUsable(seedPool[r]) && e.push(seedPool[r]);
+  return e;
 }
 function storeSeeds(e) {
   for (var r = Date.now(), t = [], n = [], s = 0; s < e.length; s++) {
@@ -710,100 +695,71 @@ function refreshSeeds(e) {
     if (lastSeedFailure && r - lastSeedFailure < SEED_FAILED_COOLDOWN_MS)
       return e(null, !1);
     seedInflight = !0;
-
-    var n = function (r) {
-      seedInflight = !1;
-      lastSeedFailure = r ? Date.now() : 0;
-      lastSeedError = r ? (r.message || "error") : "";
-      var t = seedWaiters.slice();
-      seedWaiters = [];
-      e(r || null, !r);
-      for (var s = 0; s < t.length; s++)
+    var t = url.parse(SEED_URL);
+    ((t.method = "GET"),
+      (t.rejectUnauthorized = !1),
+      (t.headers = { "User-Agent": "XuperTV/webOS" }),
+      dnsx.prepare(t, function (e, r) {
+        if (e) return n(e);
+        var t;
+        r.rejectUnauthorized = !1;
         try {
-          t[s](r || null, !r);
-        } catch (err) {}
-    };
-
-    var fetchSeedList = function (targetUrl, cb) {
-      var fullUrl =
-        targetUrl + (targetUrl.indexOf("?") === -1 ? "?" : "&") + "_t=" + Date.now();
-      var t = url.parse(fullUrl);
-      t.method = "GET";
-      t.rejectUnauthorized = !1;
-      t.headers = { "User-Agent": "XuperTV/webOS" };
-      dnsx.prepare(t, function (err, reqOpts) {
-        if (err) return cb(err);
-        var req;
-        reqOpts.rejectUnauthorized = !1;
-        try {
-          req = https.request(reqOpts, function (res) {
-            if (200 !== res.statusCode) {
-              res.resume();
-              return cb(new Error("semillas HTTP " + res.statusCode));
-            }
-            var chunks = [];
-            res.on("data", function (chunk) {
-              chunks.push(chunk);
-            });
-            res.on("error", function (err) {
-              cb(err);
-            });
-            res.on("end", function () {
-              var parsed;
-              try {
-                parsed = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-              } catch (err) {
-                return cb(err);
-              }
-              var list = parsed && parsed.seeds ? parsed.seeds : parsed;
-              if (!list || !list.length) {
-                return cb(new Error("lista de semillas vacía"));
-              }
-              storeSeeds(list);
-              console.log(
-                "[magis] semillas actualizadas: " +
-                  seedPool.length +
-                  " desde " +
-                  targetUrl
+          t = https.request(r, function (e) {
+            if (200 !== e.statusCode)
+              return (
+                e.resume(),
+                n(new Error("semillas HTTP " + e.statusCode))
               );
-              cb(null);
-            });
+            var r = [];
+            (e.on("data", function (e) {
+              r.push(e);
+            }),
+              e.on("error", function (e) {
+                n(e);
+              }),
+              e.on("end", function () {
+                var e;
+                try {
+                  e = JSON.parse(Buffer.concat(r).toString("utf8"));
+                } catch (e) {
+                  return n(e);
+                }
+                var t = e && e.seeds ? e.seeds : e;
+                if (!t || !t.length)
+                  return n(new Error("lista de semillas vacía"));
+                (storeSeeds(t),
+                  console.log(
+                    "[magis] semillas actualizadas: " + seedPool.length
+                  ),
+                  n(null));
+              }));
           });
-        } catch (err) {
-          return cb(err);
+        } catch (e) {
+          return n(e);
         }
-        req.on("error", function (err) {
-          cb(err);
-        });
-        req.setTimeout(6e3, function () {
-          req.abort();
-          cb(new Error("timeout de semillas"));
-        });
-        req.end();
-      });
-    };
-
-    fetchSeedList(SEED_URL, function (err) {
-      if (!err) return n(null);
-      console.warn(
-        "[magis] SEED_URL fallo (" +
-          (err && err.message ? err.message : err) +
-          "), intentando SEED_BACKUP_URL"
-      );
-      fetchSeedList(SEED_BACKUP_URL, function (bErr) {
-        if (!bErr) return n(null);
-        n(err || bErr);
-      });
-    });
+        (t.on("error", function (e) {
+          n(e);
+        }),
+          t.setTimeout(6e3, function () {
+            (t.abort(), n(new Error("timeout de semillas")));
+          }),
+          t.end());
+      }));
+  }
+  function n(r) {
+    ((seedInflight = !1),
+      (lastSeedFailure = r ? Date.now() : 0),
+      (lastSeedError = r ? (r.message || "error") : ""));
+    var t = seedWaiters.slice();
+    ((seedWaiters = []), e(r || null, !r));
+    for (var n = 0; n < t.length; n++)
+      try {
+        t[n](r || null, !r);
+      } catch (e) {}
   }
 }
 function pickSeed(e) {
   var r = usableSeeds();
-  if (!r.length) {
-    /* Si todas las semillas expiraron localmente, recurrir como último recurso
-       a las no revocadas mientras se intenta descargar nuevas */
-    r = usableSeeds(!0);
-  }
   if (!r.length) return null;
   for (var t = r.length - 1; t > 0; t--) {
     var n = Math.floor(Math.random() * (t + 1)),
@@ -829,18 +785,18 @@ function adoptSeed(e) {
 function rescueSeed(e, r) {
   e = e || {};
   var t = Date.now();
-  var n = function () {
+  function n() {
     var t = pickSeed(e);
     return t
       ? ((e[seedIdentity(t)] = !0), adoptSeed(t), r(null, t))
       : r(new Error("sin semillas disponibles"));
-  };
-  if (
+  }
+  if (!!(
     seedPool.length &&
     seedsAt &&
     t - seedsAt < SEED_POOL_FRESH_MS &&
     usableSeeds().length >= SEED_LOW_POOL
-  )
+  ))
     return n();
   refreshSeeds(function () {
     n();
@@ -1480,8 +1436,8 @@ function getSlb(e) {
     return e(null, slbCache.slb);
   firstCall(
     [
-      { path: "v15/getSlbInfo", bean: slbBean() },
       { path: "v14/getSlbInfo", bean: slbBean() },
+      { path: "v15/getSlbInfo", bean: slbBean() },
     ],
     function (r, t) {
       return r
