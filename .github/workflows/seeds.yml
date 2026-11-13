@@ -2,7 +2,7 @@ name: seeds
 
 on:
   schedule:
-    - cron: "15 */2 * * *"
+    - cron: "23 * * * *"
   workflow_dispatch:
     inputs:
       count:
@@ -43,7 +43,7 @@ jobs:
           curl -s https://cloudflare.com/cdn-cgi/trace || true
 
       - name: Acunar semillas
-        run: node tools/mint-seeds.js --count "${{ inputs.count || '30' }}" --ttl-hours 7 --pool pool/seeds.json --out pool/seeds.json --soft-fail
+        run: node tools/mint-seeds.js --count "${{ inputs.count || '30' }}" --pool pool/seeds.json --out pool/seeds.json --soft-fail
 
       - name: Publicar pool
         working-directory: pool
