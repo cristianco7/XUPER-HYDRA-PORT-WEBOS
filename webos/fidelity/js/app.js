@@ -1,6 +1,6 @@
 !(function () {
   "use strict";
-  var APP_VERSION = "3.0.9";
+  var APP_VERSION = "3.1.6";
   function e(e, t, a) {
     var i = document.createElement(e);
     return (t && (i.className = t), null != a && (i.textContent = a), i);
@@ -214,15 +214,22 @@
     return null == e || "" === e ? t : String(e);
   }
   function x(e) {
+    if (!e) return !1;
+    /* Si el backend o catálogo indica explícitamente película, no es serie salvo que tenga más de 1 episodio real o múltiples temporadas */
+    var isMovieExplicit = "movie" === e.type || "película" === e.kind || "pelicula" === e.category;
+    if (isMovieExplicit) {
+      if (e.seasons && e.seasons.length > 1) return !0;
+      if (e.episodes && e.episodes.length > 1) return !0;
+      return !1;
+    }
     return (
-      !!e &&
-      ("teleplay" === e.type ||
-        "series" === e.type ||
-        "serie" === e.kind ||
-        (e.category && -1 !== e.category.indexOf("serie")) ||
-        (e.episodes && e.episodes.length > 0) ||
-        (e.seasons && e.seasons.length > 0) ||
-        (e.volumeCount && parseInt(e.volumeCount, 10) > 1))
+      "teleplay" === e.type ||
+      "series" === e.type ||
+      "serie" === e.kind ||
+      (e.category && -1 !== e.category.indexOf("serie")) ||
+      (e.episodes && e.episodes.length > 1) ||
+      (e.seasons && e.seasons.length > 0) ||
+      (e.volumeCount && parseInt(e.volumeCount, 10) > 1)
     );
   }
   function T(e, t) {
@@ -913,6 +920,7 @@
       Object.prototype.hasOwnProperty.call(n, r) &&
         "—" !== n[r] &&
         "" !== n[r] &&
+        "Sin título" !== n[r] &&
         "Sin sinopsis disponible." !== n[r] &&
         (e[r] = n[r]);
     null !== a &&
@@ -1040,7 +1048,6 @@
       { label: "KIDS", page: 4, icon: "kids" },
       { label: "ANIME", page: 5, icon: "anime" },
       { label: "NOVELAS", page: 6, icon: "novel" },
-      { label: "EXPLORAR", page: 7, icon: "compass" },
       { label: "HISTORIAL", page: -1, icon: "history", action: "history" },
     ],
     j = [
@@ -2113,11 +2120,25 @@
     }
     if (!valid.length) valid = items.slice();
 
+    var row0 = (valid[0] && valid[0].row) ? String(valid[0].row).toLowerCase() : "";
+
     var scored = [];
     for (var j = 0; j < valid.length; j++) {
       var itm = valid[j];
       var row = String(itm.row || "").toLowerCase();
+      var titleLower = String(itm.title || itm.name || itm.alias || "").toLowerCase();
       var pScore = 0;
+
+      /* Prioridad 1: Curaduría oficial de XuperTV. La primera fila (row 0)
+         entregada por getNextColumns es la fila destacada curada por el portal. */
+      if (row0 && row === row0) pScore += 1000;
+
+      /* Prioridad 2: Títulos destacados de alto interés / estrenos virales recientes (ej. La Odisea) */
+      if (titleLower.indexOf("odisea") !== -1) pScore += 1050;
+      if (titleLower.indexOf("contra el huracan") !== -1 || titleLower.indexOf("contra el huracán") !== -1) pScore += 1020;
+      if (titleLower.indexOf("palomas negras") !== -1) pScore += 1020;
+      if (titleLower.indexOf("sacrificio") !== -1 && titleLower.indexOf("elegidos") !== -1) pScore += 1010;
+
       if (/top|clasificad/i.test(row)) pScore += 140;
       if (/estreno|teatral|cartelera|novedad/i.test(row)) pScore += 120;
       if (/2026/.test(row) || "2026" === String(itm.year)) pScore += 90;
@@ -2147,8 +2168,7 @@
       }
     }
 
-    // 24-hour rotation: updates once every 24 hours (1000 * 3600 * 24), not every 3 hours
-    var rot = Math.floor(Date.now() / (1000 * 3600 * 24)) % Math.max(1, pool.length);
+    // Rotación suave respetando los títulos curados
     var picked = [];
     var seenBase = {};
     var seenId = {};
@@ -2163,8 +2183,7 @@
     };
 
     for (var m = 0; m < pool.length && picked.length < count; m++) {
-      var cIdx = (rot + m) % pool.length;
-      tryPush(pool[cIdx]);
+      tryPush(pool[m]);
     }
     if (picked.length < count) {
       for (var pIdx = 0; pIdx < pool.length && picked.length < count; pIdx++) {
@@ -2319,9 +2338,10 @@
       },
       function (e) {
         var t = ha("destacado"),
-          a = selectHeroItems(t, 6),
+          heroPool = selectHeroItems(t, 10),
+          a = heroPool.slice(0, 6),
           i = !(!a[0] || !a[0]._portal);
-        fa(e, a, { titles: i, dots: i ? 4 : 0, shade: i });
+        fa(e, a, { titles: i, dots: i ? 4 : 0, shade: i, pool: heroPool });
         var n = t.filter(function (it) {
           for (var k = 0; k < a.length; k++) if (a[k] && a[k].id === it.id) return false;
           return true;
@@ -2335,9 +2355,10 @@
       },
       function (e) {
         var t = ha("pelicula"),
-          a = selectHeroItems(t, 6),
+          heroPool = selectHeroItems(t, 10),
+          a = heroPool.slice(0, 6),
           i = !(!a[0] || !a[0]._portal);
-        fa(e, a, { titles: i, dots: i ? 4 : 0, shade: i });
+        fa(e, a, { titles: i, dots: i ? 4 : 0, shade: i, pool: heroPool });
         var n = t.filter(function (it) {
           for (var k = 0; k < a.length; k++) if (a[k] && a[k].id === it.id) return false;
           return true;
@@ -2351,9 +2372,10 @@
       },
       function (e) {
         var t = ha("serie"),
-          a = selectHeroItems(t, 6),
+          heroPool = selectHeroItems(t, 10),
+          a = heroPool.slice(0, 6),
           i = !(!a[0] || !a[0]._portal);
-        fa(e, a, { titles: i, dots: i ? 3 : 2, shade: i });
+        fa(e, a, { titles: i, dots: i ? 3 : 2, shade: i, pool: heroPool });
         var n = t.filter(function (it) {
           for (var k = 0; k < a.length; k++) if (a[k] && a[k].id === it.id) return false;
           return true;
@@ -2367,9 +2389,10 @@
       },
       function (e) {
         var t = ha("infantil"),
-          a = selectHeroItems(t, 6),
+          heroPool = selectHeroItems(t, 10),
+          a = heroPool.slice(0, 6),
           i = !(!a[0] || !a[0]._portal);
-        fa(e, a, { titles: i, dots: i ? 3 : 2, shade: i });
+        fa(e, a, { titles: i, dots: i ? 3 : 2, shade: i, pool: heroPool });
         var n = t.filter(function (it) {
           for (var k = 0; k < a.length; k++) if (a[k] && a[k].id === it.id) return false;
           return true;
@@ -2383,9 +2406,10 @@
       },
       function (e) {
         var t = ha("anime"),
-          a = selectHeroItems(t, 6),
+          heroPool = selectHeroItems(t, 10),
+          a = heroPool.slice(0, 6),
           i = !(!a[0] || !a[0]._portal);
-        fa(e, a, { titles: i, dots: i ? 3 : 2, shade: i });
+        fa(e, a, { titles: i, dots: i ? 3 : 2, shade: i, pool: heroPool });
         var n = t.filter(function (it) {
           for (var k = 0; k < a.length; k++) if (a[k] && a[k].id === it.id) return false;
           return true;
@@ -2400,9 +2424,10 @@
       function (t) {
         var a = ha("novela");
         if (a.length) {
-          var hero = selectHeroItems(a, 6);
+          var heroPool = selectHeroItems(a, 10);
+          var hero = heroPool.slice(0, 6);
           var hasPortal = !(!hero[0] || !hero[0]._portal);
-          fa(t, hero, { titles: hasPortal, dots: hasPortal ? 3 : 2, shade: hasPortal });
+          fa(t, hero, { titles: hasPortal, dots: hasPortal ? 3 : 2, shade: hasPortal, pool: heroPool });
           var remaining = a.filter(function (it) {
             for (var k = 0; k < hero.length; k++) if (hero[k] && hero[k].id === it.id) return false;
             return true;
@@ -2421,24 +2446,6 @@
           );
           (i(s, 192, 170, 1500, 80), t.appendChild(s));
         }
-      },
-      function (t) {
-        var a = l.length ? l : [];
-        t.appendChild(ua(a[0], 192, 38.5, 1249, 703, { shade: !0 }));
-        for (var n = 0; n < 3; n++)
-          t.appendChild(
-            ua(a[(n + 1) % a.length], 1446, 38.5 + 231 * n, 413, 226, {
-              badge: 2 === n ? "Adult" : "",
-            })
-          );
-        t.appendChild(e("div", "explore-row-title", "Netflix"));
-        var r = e("div", "explore-strip");
-        i(r, 192, 811.5, 1920, 130);
-        for (var o = 0; o < 8; o++) {
-          var s = e("div", "explore-logo");
-          (i(s, 272 * o, 0, 260, 120), r.appendChild(s));
-        }
-        t.appendChild(r);
       },
     ],
     ht = {},
@@ -2673,36 +2680,31 @@
               root = document.querySelector(".screen.is-active") || document;
             }
             if (!root) return;
-            var e = root.querySelectorAll("img[data-poster-src]"),
-              tWin = window.innerWidth || 1920,
-              aWin = window.innerHeight || 1080;
+            var e = root.querySelectorAll("img[data-poster-src]");
+            var tWin = window.innerWidth || 1920;
+            var aWin = window.innerHeight || 1080;
             for (var i = 0; i < e.length; i++) {
-              var r = e[i],
-                o = n(r, ".poster, .bento"),
-                s =
-                  o && o.getBoundingClientRect
-                    ? o.getBoundingClientRect()
-                    : null;
+              var r = e[i];
+              var o = n(r, ".poster, .bento");
+              var s =
+                o && o.getBoundingClientRect
+                  ? o.getBoundingClientRect()
+                  : null;
               if (
                 s &&
-                s.bottom > -100 &&
-                s.top < aWin + 250 &&
-                s.right > -100 &&
-                s.left < tWin + 250
+                s.bottom > -80 &&
+                s.top < aWin + 180 &&
+                s.right > -80 &&
+                s.left < tWin + 180
               ) {
                 if (!r.getAttribute("src")) {
                   r.style.display = "";
                   r.src = r.getAttribute("data-poster-src");
                 }
-              } else if (r.getAttribute("src")) {
-                r.removeAttribute("src");
-                try {
-                  r.src = "";
-                } catch (err) {}
               }
             }
           })());
-      }, 80)));
+      }, 40)));
   }
   function St(e) {
     if ("home" === X.screen) {
@@ -2758,6 +2760,116 @@
       wt(),
       l
     );
+  }
+  /* Señales DirecTV/DSports y ESPN con fuentes verificadas (2026-11-13).
+     La lista pública de iptv-org traía entradas caídas (403, ECONNREFUSED,
+     dominios muertos y bloqueos geográficos), y por eso estos canales "no
+     cargaban nunca". Aquí se fija una lista corta con señales que responden
+     con manifiesto y segmentos válidos, y DSports se resuelve por el portal
+     (canal con licencia), que es la vía estable. Es una lista estática: si
+     una fuente pública muere, se sustituye por otra verificada. */
+  var CURATED_DIRECTV_ESPN = [
+    {
+      name: "DSports / DirecTV Sports",
+      logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/ca/DirecTV_Sports_Latin_America_%282018%29.png/960px-DirecTV_Sports_Latin_America_%282018%29.png",
+      channelCode: "cyx_DDF490BFAF3D882ACE33C",
+    },
+    {
+      name: "DSports 2",
+      logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/1/10/DIRECTV_Sports_2_Latin_America_%282018%29.svg/960px-DIRECTV_Sports_2_Latin_America_%282018%29.svg.png",
+      streamUrl: "http://45.134.141.161:2200/ARG/DTV_SP2/tracks-v1a1/mono.m3u8",
+    },
+    {
+      name: "ON DIRECTV HD",
+      logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/ca/DirecTV_Sports_Latin_America_%282018%29.png/960px-DirecTV_Sports_Latin_America_%282018%29.png",
+      channelCode: "cyx_61366620180839483689757919",
+    },
+    {
+      name: "ESPN Latinoamérica (Colombia)",
+      logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/ESPN_wordmark.svg/960px-ESPN_wordmark.svg.png",
+      streamUrl: "http://190.61.47.54:8000/play/a004/index.m3u8",
+    },
+    {
+      name: "ESPN 2 Latinoamérica (Colombia)",
+      logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/b/bf/ESPN2_logo.svg/960px-ESPN2_logo.svg.png",
+      streamUrl: "http://190.61.47.54:8000/play/a005/index.m3u8",
+    },
+    {
+      name: "ESPN Latinoamérica (México)",
+      logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/ESPN_wordmark.svg/960px-ESPN_wordmark.svg.png",
+      streamUrl: "http://168.228.44.241:9997/play/a06p/index.m3u8",
+    },
+    {
+      name: "ESPN (Estados Unidos) HD",
+      logo: "https://imgx.fubo.tv/station_logos/espn-hd_c.png",
+      streamUrl: "http://85.237.89.160:9590/usa-s/ESPN-HD/index.m3u8",
+    },
+    {
+      name: "ESPN 2 (Estados Unidos) HD",
+      logo: "https://i.imgur.com/00tsvjE.png",
+      streamUrl: "http://85.237.89.160:9590/usa-s/ESPN-2-HD/index.m3u8",
+    },
+    {
+      name: "ESPNU (Estados Unidos) HD",
+      logo: "https://i.imgur.com/HiBrysh.png",
+      streamUrl: "http://85.237.89.160:9590/usa-s/ESPN-U-HD/index.m3u8",
+    },
+    {
+      name: "ESPN Premium HD",
+      logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/ESPN_Premium_logo.svg/960px-ESPN_Premium_logo.svg.png",
+      streamUrl: "http://158.172.155.130:8000/play/a0ao/index.m3u8",
+    },
+    {
+      name: "ESPN Premium (Argentina)",
+      logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/ESPN_Premium_logo.svg/960px-ESPN_Premium_logo.svg.png",
+      streamUrl: "http://45.134.141.161:2200/ARG/ESPN_Premium_Argentina_HD/tracks-v1a1/mono.m3u8",
+    },
+    {
+      name: "ESPN Brasil",
+      logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/ESPN_wordmark.svg/960px-ESPN_wordmark.svg.png",
+      streamUrl: "http://181.78.197.59:8000/play/a07z/index.m3u8",
+    },
+    {
+      name: "ESPN 3 Brasil",
+      logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/ESPN_wordmark.svg/960px-ESPN_wordmark.svg.png",
+      streamUrl: "http://181.78.197.59:8000/play/a081/index.m3u8",
+    },
+    {
+      name: "ESPN 4 Brasil",
+      logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/7/78/ESPN_4_logo.svg/960px-ESPN_4_logo.svg.png",
+      streamUrl: "http://181.78.197.59:8000/play/a07n/index.m3u8",
+    },
+    {
+      name: "ESPN 8: The Ocho",
+      logo: "https://images.fubo.tv/channel-config-ui/station-logos/on-dark/espn_8_the_ocho_bw.png",
+      streamUrl: "https://d3b6q2ou5kp8ke.cloudfront.net/ESPNTheOcho.m3u8",
+    },
+  ];
+  /* Los addons curados traen su propia lista de señales; no descargan nada.
+     Se normalizan al mismo formato que entrega el parser M3U del servicio. */
+  function curatedAddonChannels(addon) {
+    var src = addon && addon.channels, out = [], i, c, o;
+    if (!src || !src.length) return null;
+    for (i = 0; i < src.length; i++) {
+      c = src[i];
+      if (!c || (!c.streamUrl && !c.channelCode)) continue;
+      o = {
+        name: c.name,
+        logo: c.logo || "",
+        group: c.group || addon.name || "Addon",
+        isAddon: !0,
+        now: "En vivo",
+        next: "",
+        time: "",
+        fav: !1,
+        url: c.streamUrl || "",
+        streamUrl: c.streamUrl || "",
+        channelCode: c.channelCode || "m3u_" + (out.length + 1),
+        index: out.length + 1,
+      };
+      out.push(o);
+    }
+    return out;
   }
   var Tt = [
     {
@@ -2823,11 +2935,10 @@
     {
       id: "directv_espn",
       name: "DirecTV Sports y ESPN",
-      url: "https://iptv-org.github.io/iptv/categories/sports.m3u?xuper=directv-espn",
-      desc: "DSports (DirecTV Sports), ESPN, ESPN 2, ESPN 3 y señales deportivas de Latinoamérica",
-      /* De la lista pública de deportes se conservan únicamente las señales
-         DirecTV/DSports y ESPN, para que el addon muestre solo esos canales. */
-      filter: "ESPN|DSports|DirecTV",
+      desc: "DSports, DSports 2, ON DIRECTV y señales ESPN de Latinoamérica, Estados Unidos, Argentina y Brasil",
+      /* Lista curada con fuentes verificadas (ya no descarga la lista
+         pública de deportes, que traía casi todas esas señales caídas). */
+      channels: CURATED_DIRECTV_ESPN,
     },
     {
       id: "animation_iptv",
@@ -2891,10 +3002,20 @@
           added = !0;
         } else if (Tt[p].channels && Tt[p].channels.length) {
           /* Los presets curados se refrescan: versiones viejas guardaron el
-             addon DirecTV/ESPN con una URL pública cuyos canales estaban caídos. */
+             addon DirecTV/ESPN con una URL pública cuyos canales estaban caídos
+             y, más adelante, con una lista más corta de señales verificadas.
+             Si la lista guardada no coincide con la del preset actual, se
+             sustituye para que aparezcan las señales nuevas. */
           for (var q = 0; q < updated.length; q++) {
             if (updated[q] && updated[q].id === Tt[p].id) {
-              if (!updated[q].channels || !updated[q].channels.length) {
+              var same = !1;
+              try {
+                same =
+                  !!updated[q].channels &&
+                  JSON.stringify(updated[q].channels) ===
+                    JSON.stringify(Tt[p].channels);
+              } catch (e) {}
+              if (!same) {
                 updated[q] = Tt[p];
                 added = !0;
               }
@@ -2927,9 +3048,8 @@
   var DIRECTV_ESPN_CATEGORY = {
     id: "directv_espn_live",
     name: "DirecTV / ESPN",
-    addonUrl:
-      "https://iptv-org.github.io/iptv/categories/sports.m3u?xuper=directv-espn-live",
-    filter: "ESPN|DSports|DirecTV",
+    /* Lista curada, sin descarga: mismas señales verificadas del addon. */
+    channels: CURATED_DIRECTV_ESPN,
   };
   var DEFAULT_LIVE_CATEGORIES = [
     { id: 76182, name: 'Todos', code: 'ba397e42-b664-11ed-8c55-768dd7bc60d3' },
@@ -3144,7 +3264,7 @@
       syncLiveFavoriteButtons();
       dr();
       updatePlayerCatBadge();
-      if (e.addonUrl) {
+      if (e.addonUrl || (e.channels && e.channels.length)) {
         loadAddonCategory(e, function () { t && t(); });
       } else if (e.isAddon) {
         $t(function () { t && t(); });
@@ -3155,13 +3275,25 @@
   }
   function loadM3uChannels(addons, done) {
     if (!addons || !addons.length) return done && done([]);
-    for (var out = [], total = addons.length, i = 0; i < addons.length; i++)
+    var out = [],
+      pending = addons.length,
+      i;
+    function settle() {
+      if (--pending <= 0) done && done(out);
+    }
+    for (i = 0; i < addons.length; i++)
       (function (addon) {
+        var curated = curatedAddonChannels(addon), k;
+        if (curated && curated.length) {
+          for (k = 0; k < curated.length; k++) out.push(curated[k]);
+          return settle();
+        }
+        if (!addon.url) return settle();
         P("fetchM3u", { url: addon.url }, function (err, res) {
           var chans =
             res && res.channels ? addonFilterChannels(addon, res.channels) : [];
-          for (var k = 0; k < chans.length; k++) out.push(chans[k]);
-          if (--total <= 0) done && done(out);
+          for (var k2 = 0; k2 < chans.length; k2++) out.push(chans[k2]);
+          settle();
         });
       })(addons[i]);
   }
@@ -3180,7 +3312,7 @@
   }
   function loadAddonCategory(cat, done) {
     jr("Cargando canales de " + (cat.name || "Addon") + "…");
-    loadM3uChannels([{ url: cat.addonUrl, filter: cat.filter }], function (list) {
+    loadM3uChannels([cat], function (list) {
       if (!list || !list.length) {
         (jr(""),
           Yt(
@@ -3855,7 +3987,7 @@
       s < r.length;
       s++
     )
-      o[r[s].url] = !0;
+      o[r[s].id || r[s].url] = !0;
     if (i) {
       a(i);
       for (var l = 0; l < Tt.length; l++)
@@ -3865,7 +3997,7 @@
           (n.appendChild(e("div", "da-preset-name", t.name)),
             n.appendChild(e("div", "da-preset-desc", t.desc)),
             a.appendChild(n));
-          var r = !!o[t.url],
+          var r = !!o[t.id || t.url],
             s = e(
               "button",
               "da-preset-btn focusable" + (r ? " is-installed" : ""),
@@ -3898,7 +4030,8 @@
               l = e(
                 "div",
                 "da-preset-desc",
-                (t.count ? t.count + " canales • " : "") + t.url
+                (t.count ? t.count + " canales • " : "") +
+                  (t.url || "lista curada")
               );
             (o.appendChild(s), o.appendChild(l), i.appendChild(o));
             var d = e("button", "da-del-btn focusable", "Eliminar");
@@ -3953,6 +4086,39 @@
     }
   }
   function ca(e, t) {
+    var curated = curatedAddonChannels(e);
+    if (curated && curated.length) {
+      /* Addon curado: no hay descarga. Se guarda su lista de señales para que
+         la migración de _t() no vuelva a sustituirlo por la lista pública. */
+      var list = _t(),
+        replaced = !1,
+        i;
+      for (i = 0; i < list.length; i++)
+        if (
+          list[i] &&
+          (list[i].id === e.id || (e.url && list[i].url === e.url))
+        ) {
+          list[i] = {
+            id: e.id || list[i].id,
+            name: e.name || list[i].name,
+            desc: e.desc || list[i].desc || "",
+            channels: e.channels,
+            count: curated.length,
+          };
+          replaced = !0;
+          break;
+        }
+      replaced ||
+        list.push({
+          id: e.id || "addon_" + Date.now(),
+          name: e.name || "Lista M3U",
+          desc: e.desc || "",
+          channels: e.channels,
+          count: curated.length,
+        });
+      (kt(list), t && t(null, curated.length));
+      return;
+    }
     P("fetchM3u", { url: e.url }, function (a, i) {
       var chans = i && i.channels ? addonFilterChannels(e, i.channels) : [];
       if (!a && chans.length) {
@@ -4033,13 +4199,15 @@
     var i = t.length ? t : l;
     if (i.length) {
       var n;
-      for (n = 0; n < 2; n++)
-        e.appendChild(
-          ua(i[n % i.length], pa.bigX[n], pa.bigY, pa.bigW, pa.bigH, {
-            shade: !1 !== a.shade,
-            title: a.titles,
-          })
-        );
+      var firstCard = null;
+      for (n = 0; n < 2; n++) {
+        var bigCard = ua(i[n % i.length], pa.bigX[n], pa.bigY, pa.bigW, pa.bigH, {
+          shade: !1 !== a.shade,
+          title: a.titles,
+        });
+        if (0 === n) firstCard = bigCard;
+        e.appendChild(bigCard);
+      }
       for (n = 0; n < 4; n++)
         e.appendChild(
           ua(
@@ -4051,7 +4219,42 @@
             {}
           )
         );
-      a.dots && e.appendChild(va(848, 535.5, a.dots, 0));
+      var dotsContainer = a.dots ? va(848, 535.5, a.dots, 0) : null;
+      dotsContainer && e.appendChild(dotsContainer);
+
+      // Auto-rotación del carrusel bento (dots + tarjeta principal 01)
+      if (a.dots && a.dots > 1 && firstCard) {
+        var pool = a.pool && a.pool.length >= a.dots ? a.pool : i;
+        var dotElements = dotsContainer ? dotsContainer.querySelectorAll(".bento-dot") : [];
+        var currentDotIndex = 0;
+        var rotateTimer = setInterval(function () {
+          if (!document.body.contains(e) || !document.body.contains(firstCard)) {
+            clearInterval(rotateTimer);
+            return;
+          }
+          currentDotIndex = (currentDotIndex + 1) % a.dots;
+          // Actualizar dots visuales
+          for (var d = 0; d < dotElements.length; d++) {
+            dotElements[d].classList.toggle("is-active", d === currentDotIndex);
+          }
+          // Cambiar item de la primera tarjeta
+          var nextItem = pool[currentDotIndex % pool.length];
+          if (nextItem) {
+            firstCard._item = nextItem;
+            firstCard._activate = function () { ba(nextItem); };
+            var imgEl = firstCard.querySelector(".bento-img");
+            var newSrc = nextItem.landscape || nextItem.poster || "";
+            if (imgEl && newSrc) {
+              imgEl.src = newSrc;
+              imgEl.style.display = "";
+            }
+            var titleEl = firstCard.querySelector(".bento-title");
+            if (titleEl && nextItem.title) {
+              titleEl.textContent = nextItem.title;
+            }
+          }
+        }, 5000);
+      }
     }
   }
   function isNovelaItem(item) {
@@ -6180,22 +6383,50 @@
                     (ev.ch ? "  " + Ka(ev.ch) : "")
                 );
               }
-              (lines.push(""),
-                ps &&
-                  lines.push(
-                    "PROXY CDN: peticiones " +
-                      (ps.reqs || 0) +
-                      " | errores " +
-                      (ps.errors || 0) +
-                      " | timeouts " +
-                      (ps.timeouts || 0) +
-                      " | HTTP>=400 " +
-                      (ps.badStatus || 0) +
-                      (ps.lastError ? " | ultimo: " + Ka(ps.lastError) : "")
-                  ),
+              lines.push("");
+              if (ps)
                 lines.push(
-                  "Foto de esta pantalla = lo que necesito para ver el corte."
-                ));
+                  "PROXY CDN: peticiones " +
+                    (ps.reqs || 0) +
+                    " | errores " +
+                    (ps.errors || 0) +
+                    " | timeouts " +
+                    (ps.timeouts || 0) +
+                    " | HTTP>=400 " +
+                    (ps.badStatus || 0) +
+                    (ps.lastError ? " | ultimo: " + Ka(ps.lastError) : "")
+                );
+              if (ps && ps.hls && ps.hls.length) {
+                var hlsTxt = [];
+                for (
+                  var hi = Math.max(0, ps.hls.length - 4);
+                  hi < ps.hls.length;
+                  hi++
+                ) {
+                  var hh = ps.hls[hi] || {};
+                  hlsTxt.push(
+                    "segs=" +
+                      (hh.segs || 0) +
+                      "/" +
+                      (hh.out || hh.segs || 0) +
+                      (hh.l247 ? " 247" : "") +
+                      " tipo=" +
+                      (hh.type || "?") +
+                      (hh.end ? " FIN" : "") +
+                      " tgt=" +
+                      (hh.tgt || 0) +
+                      " ms=" +
+                      (hh.ms || "?") +
+                      "/" +
+                      (hh.oms || hh.ms || "?") +
+                      (hh.st ? " start=" + hh.st : "")
+                  );
+                }
+                lines.push("HLS: " + hlsTxt.join(" | "));
+              }
+              lines.push(
+                "Foto de esta pantalla = lo que necesito para ver el corte."
+              );
               var box = e("div", "dg-report", lines.join("\n"));
               while (l.firstChild) l.removeChild(l.firstChild);
               (l.appendChild(box),
@@ -6313,6 +6544,35 @@
                       (ps.badStatus || 0) +
                       (ps.lastError ? " | ultimo: " + Ka(ps.lastError) : "")
                   );
+                var hlsR = e.proxyStats && e.proxyStats.hls;
+                if (hlsR && hlsR.length) {
+                  var hlsRTxt = [];
+                  for (
+                    var hri = Math.max(0, hlsR.length - 4);
+                    hri < hlsR.length;
+                    hri++
+                  ) {
+                    var hrh = hlsR[hri] || {};
+                    hlsRTxt.push(
+                      "segs=" +
+                        (hrh.segs || 0) +
+                        "/" +
+                        (hrh.out || hrh.segs || 0) +
+                        (hrh.l247 ? " 247" : "") +
+                        " tipo=" +
+                        (hrh.type || "?") +
+                        (hrh.end ? " FIN" : "") +
+                        " tgt=" +
+                        (hrh.tgt || 0) +
+                        " ms=" +
+                        (hrh.ms || "?") +
+                        "/" +
+                        (hrh.oms || hrh.ms || "?") +
+                        (hrh.st ? " start=" + hrh.st : "")
+                    );
+                  }
+                  t.push("HLS: " + hlsRTxt.join(" | "));
+                }
                 return (
                   t.push(""),
                   t.push(
@@ -8272,11 +8532,29 @@
         (X.episodeSwitchSeq = (X.episodeSwitchSeq || 0) + 1));
       var a = X.episodeSwitchSeq;
       (zr(),
+        showLoadingBackdrop(e, "Cargando capítulo " + ((t && (t.number || t.seriesNumber)) || "") + "…"),
         jr("Cambiando capítulo…"),
         (X.episodeSwitchTimer = setTimeout(function () {
           ((X.episodeSwitchTimer = null),
             a === X.episodeSwitchSeq && ("player" === X.screen || "detail" === X.screen) && Jr(e, t));
         }, 600)));
+    }
+  }
+  function showLoadingBackdrop(e, text) {
+    if ((ke || (ke = t("next-episode-loading")), ke)) {
+      var a = (e && (e.backdrop || e.landscape || e.poster)) || "";
+      ke.style.backgroundImage = a ? 'url("' + String(a).replace(/"/g, "%22") + '")' : "";
+      var txtEl = ke.querySelector(".next-episode-loading-text");
+      if (txtEl) {
+        if (text) {
+          txtEl.innerHTML = text;
+        } else if (e && e.title) {
+          txtEl.innerHTML = "Cargando " + e.title + "…";
+        } else {
+          txtEl.innerHTML = "Cargando…";
+        }
+      }
+      ke.classList.add("is-active");
     }
   }
   function Gn() {
@@ -8314,15 +8592,7 @@
         }
       if (!(n < 0))
         if (
-          ((function (e) {
-            if ((ke || (ke = t("next-episode-loading")), ke)) {
-              var a = (e && (e.backdrop || e.landscape || e.poster)) || "";
-              ((ke.style.backgroundImage = a
-                ? 'url("' + String(a).replace(/"/g, "%22") + '")'
-                : ""),
-                ke.classList.add("is-active"));
-            }
-          })(e),
+          (showLoadingBackdrop(e, "El siguiente capítulo se está<br>cargando..."),
           n + 1 < a.length)
         )
           $n(e, a[n + 1]);
@@ -8619,12 +8889,16 @@
         var t = Cr + (xe.currentTime || 0);
         Gr(br + "?start=" + Math.floor(t) + "&a=" + e);
       } else sr();
-    else
-      rr(e)
-        ? ((Gi = Date.now() + 5e3), jr("Idioma cambiado"))
-        : jr(
-            "Esta TV no permite cambiar audio en Normal. Usa Modo Fluido para esa pista."
-          );
+    else if (rr(e)) {
+      ((Gi = Date.now() + 5e3), jr("Idioma cambiado"));
+    } else {
+      /* Si la TV no soporta conmutar audio nativo en Modo Normal, se activa
+         Modo Fluido con la pista de audio seleccionada para que el relay
+         entregue el stream remultiplexado en español/idioma elegido. */
+      jr("Activando Modo Fluido para idioma " + (nr(n) || "seleccionado") + "…");
+      X.streamMode = "smooth";
+      sr();
+    }
   }
   /* Compatibilidad de pista (port de XuperMH v2.31.1): informa al servicio si
      el panel decodifica HEVC y si es UHD, para que no entregue 4K/HEVC a un
@@ -8648,11 +8922,19 @@
   function xHevcCapable() {
     if ("boolean" == typeof panelHevc) return panelHevc;
     var e = panelInfo(),
-      t = Number(e.platformVersionMajor) || 0;
+      t = Number(e.platformVersionMajor) || 0,
+      m = String(e.modelName || "");
+    /* TVs FHD como LJ550/LJ5500/LJ550T (webOS 3.5/3.7) NO decodifican HEVC de
+       forma fiable y deben recibir H.264/AVC en lugar de HEVC para no quedar
+       en pantalla negra. */
+    if (/LJ55|LJ54|LJ50|LJ51|LJ52|LF59|LF63|LH57|LH59|LH60/i.test(m)) {
+      panelHevc = !1;
+      return !1;
+    }
     panelHevc =
       !t ||
       t >= 4 ||
-      /OLED|^\d{2}(UB|UF|UH|UJ|SJ|EG|EF|EC9)/i.test(String(e.modelName || ""));
+      /OLED|^\d{2}(UB|UF|UH|UJ|SJ|EG|EF|EC9)/i.test(m);
     try {
       panelHevc ||
         !window.webOS ||
@@ -9922,6 +10204,15 @@
       ((xe.onerror = function () {
         (Gn(), Nr(), logLive("err"));
         var t = xe.error && xe.error.code;
+        /* TV en vivo: un fallo del decodificador (err=3) o de red (err=2) no
+           debe dejar el canal parado. Se recarga la señal con un token nuevo,
+           sin seek y sin mostrar error fatal. */
+        if (
+          (2 === t || 3 === t) &&
+          "live" === X.playerMode &&
+          liveRecoverFromError(t)
+        )
+          return;
         if (4 === t && "live" === X.playerMode && o && !a) {
           var i = Zr;
           return (
@@ -10071,9 +10362,14 @@
                 if (liveTime > liveStallLastTime + 0.25) {
                   liveStallLastTime = liveTime;
                   liveStallStableSince || (liveStallStableSince = Date.now());
-                  liveStallRetries &&
+                  if (
                     Date.now() - liveStallStableSince >= 3e4 &&
-                    (liveStallRetries = 0);
+                    (liveStallRetries || liveDecodeRetries)
+                  ) {
+                    liveStallRetries = 0;
+                    liveDecodeRetries = 0;
+                    liveDecodeCooldown = 0;
+                  }
                 }
               })(),
             !X.streamError &&
@@ -10155,14 +10451,20 @@
           Pr("Conectando…");
         }));
       for (
-        var l = {
-            mediaTransportType: o ? "HLS" : "URI",
-            option: {
-              transmission: {
-                playTime: { start: 0 },
-              },
-            },
-          },
+        /* En vivo NO se envía playTime.start=0: forzar el inicio al segmento
+           más viejo de la ventana HLS saca al decodificador del borde en vivo
+           y termina en MEDIA_ERR_DECODE (err=3). VOD conserva el inicio en 0. */
+        var l =
+            "live" === X.playerMode
+              ? { mediaTransportType: o ? "HLS" : "URI" }
+              : {
+                  mediaTransportType: o ? "HLS" : "URI",
+                  option: {
+                    transmission: {
+                      playTime: { start: 0 },
+                    },
+                  },
+                },
           d = encodeURI(JSON.stringify(l)),
           c = a ? s : s + ";mediaOption=" + d;
         xe.firstChild;
@@ -10185,9 +10487,15 @@
         try {
           xe.src = e;
         } catch (e) {}
-      try {
-        xe.currentTime = 0;
-      } catch (e) {}
+      /* En vivo no se altera currentTime: en el demuxer nativo de webOS
+         cualquier posición forzada (aunque sea 0) rompe la sincronización de
+         una emisión HLS/TS y provoca MEDIA_ERR_DECODE (err=3). */
+      "vod" === X.playerMode &&
+        (function () {
+          try {
+            xe.currentTime = 0;
+          } catch (e) {}
+        })();
       (xe.classList.add("is-active"), Te && (Te.style.display = "none"));
       try {
         xe.load();
@@ -10390,7 +10698,7 @@
       vi(),
       n
         ? X.streamError || (Dr(), jr(""), $r())
-        : Jr(X.playerItem, X.playerEpisode));
+        : (showLoadingBackdrop(X.playerItem, "Cargando " + ((X.playerItem && X.playerItem.title) || "") + "…"), Jr(X.playerItem, X.playerEpisode)));
   }
   function Yr(e, t, a) {
     "vod" !== e || "detail" !== X.screen
@@ -10411,7 +10719,7 @@
         rt(Ce),
         ao(),
         "vod" === e
-          ? (vi(), Jr(X.playerItem, X.playerEpisode))
+          ? (vi(), showLoadingBackdrop(X.playerItem, "Cargando " + ((X.playerItem && X.playerItem.title) || "") + "…"), Jr(X.playerItem, X.playerEpisode))
           : (pi(), to(F[X.channel])))
       : Kr(t, a);
   }
@@ -10428,6 +10736,8 @@
     liveGuardUntil = 0,
     liveGuardCooldown = 0,
     liveUserPaused = !1,
+    liveDecodeRetries = 0,
+    liveDecodeCooldown = 0,
     liveLogBuf = [],
     liveLogTimer = null;
   /* Registro de eventos de TV en vivo: se envía al servicio (método liveLog)
@@ -10475,6 +10785,32 @@
   function liveLatencyGuard(cur) {
     return;
   }
+  /* Recuperación de TV en vivo ante error del reproductor nativo.
+     No hace seek ni toca currentTime: pide un token nuevo al servicio y
+     vuelve a montar el <video> en el borde en vivo. Se limita a 2 intentos
+     por canal con enfriamiento para no entrar en un bucle de recargas. */
+  function liveRecoverFromError(code) {
+    if ("live" !== X.playerMode || "player" !== X.screen) return !1;
+    if (Date.now() < liveDecodeCooldown) return !1;
+    if (liveDecodeRetries >= 2) return !1;
+    liveDecodeRetries++;
+    liveDecodeCooldown = Date.now() + 4e3;
+    liveStallRetries = 0;
+    X.streamError = "";
+    logLive("recover" + (code || ""));
+    jr("Reconectando señal…");
+    clearLiveStallWatch();
+    try {
+      xe && xe.pause();
+    } catch (e) {}
+    eo && (clearTimeout(eo), (eo = null));
+    setTimeout(function () {
+      "live" === X.playerMode &&
+        "player" === X.screen &&
+        to(F[X.channel], !0, !0);
+    }, 600);
+    return !0;
+  }
   function watchLiveStall(delay, mark) {
     clearLiveStallWatch();
     if ("live" !== X.playerMode || !xe || "player" !== X.screen) return;
@@ -10502,7 +10838,7 @@
         watchLiveStall(delay);
         return;
       }
-      if (cur > liveWatchSample + 1.2) {
+      if (cur > liveWatchSample + 0.8) {
         watchLiveStall(delay);
         return;
       }
@@ -10511,7 +10847,17 @@
         if (xe.buffered && xe.buffered.length > 0)
           end = xe.buffered.end(xe.buffered.length - 1);
       } catch (e) {}
-      if (end > cur + 1) {
+      /* Si la reproducción en vivo tiene buffer saludable (más de 1.5s por
+         delante) y readyState >= 3, el canal está fluyendo normalmente y
+         NO se debe interrumpir ni recargar. */
+      if ("live" === X.playerMode && end > cur + 1.5 && xe.readyState >= 3) {
+        watchLiveStall(delay);
+        return;
+      }
+      /* nudge desactivado en live: seek sobre HLS/TS nativo de webOS Starfish
+         destruye el demuxer y deja la pantalla congelada (MEDIA_ERR_DECODE).
+         En live simplemente dejamos que el watchdog continúe. */
+      if (end > cur + 1 && "vod" === X.playerMode) {
         try {
           xe.currentTime = Math.min(end - 0.5, cur + 5);
           logLive("nudge");
@@ -10539,7 +10885,9 @@
         ((liveStallChannel = X.channel),
         (liveStallRetries = 0),
         (liveStallLastTime = -1),
-        (liveStallStableSince = 0));
+        (liveStallStableSince = 0),
+        (liveDecodeRetries = 0),
+        (liveDecodeCooldown = 0));
       clearLiveStallWatch();
       logLive("zap");
       var a = function () {

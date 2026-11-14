@@ -16,6 +16,11 @@ comportamiento:
   `resolve` y `resolveSmooth`, y la condición que llama `relay.register`.
 - `webos/services/com.webosflux.xuptertv.fidelity.service/ffmpeg-relay.js`.
 - `webos/services/com.webosflux.xuptertv.fidelity.service/ffmpeg`.
+- `webos/services/com.webosflux.xuptertv.fidelity.service/proxy.js`: `rewriteHlsManifest`
+  (normalización del manifiesto HLS 24/7: renumeración monotónica de
+  `#EXT-X-MEDIA-SEQUENCE`, ventana corta y `#EXT-X-START`) y `noteHls` (diagnóstico HLS).
+  Zona protegida desde el 2026-11-13; para tocarla hace falta
+  **"modificar TV en vivo"** (ver sección 7.4).
 
 ### Contrato obligatorio de reproducción:
 - **Normal** usa el proxy directo (`proxy.baseUrl() + '/media/...'`).
@@ -107,6 +112,7 @@ Antes de entregar cualquier cambio que afecte la app, comprobar:
 14. Que TV en vivo mantenga favoritos (`liveFavorites`), botones de cabecera (`f-fav`, `f-all`, `f-srch`), tecla amarilla y foco al primer canal visible (ver sección 7).
 15. Que el carrusel de catálogo mantenga rieles `.catalog-rail` y loop horizontal de retorno estilo Netflix (ver sección 7).
 16. Que la reproducción en vivo no intente forzar seeks ni alterar `currentTime` en canales 24/7 (ver sección 7).
+17. Que `proxy.js` mantenga la normalización del manifiesto HLS 24/7: renumeración monotónica de `#EXT-X-MEDIA-SEQUENCE` por segmento (`hlsSeqMap`/`hlsSeqNext`), ventana corta de los últimos segmentos, `#EXT-X-START:TIME-OFFSET=-15`, y que VOD/ENDLIST/canales normales sigan intactos (ver sección 7.4).
 
 Si una tarea visual requiere tocar alguna de estas rutas o módulos protegidos,
 detenerse y pedir autorización explícita al usuario antes de hacerlo.
@@ -217,6 +223,29 @@ Los controles de navegación de canales en vivo, el sistema de favoritos y el ca
    - En canales 24/7 y cualquier emisión de TV en vivo (`X.playerMode === "live"`), **JAMÁS se debe alterar `currentTime` ni forzar seeks automáticos** (por ejemplo, retrasos de latencia como `liveLatencyGuard` o saltos artificiales).
    - En el reproductor nativo HTML5 de webOS, intentar hacer seek o modificar la posición de reproducción en una emisión live HLS/TS destruye la sincronización del demuxer nativo de Starfish y dispara `MEDIA_ERR_DECODE` (`err=3`), congelando la imagen y dejando el canal trabado.
    - La transmisión en vivo debe correr de forma fluida y natural al ritmo del proxy local sin manipulaciones de tiempo.
+4. **Normalización del manifiesto HLS 24/7 en `proxy.js` (`rewriteHlsManifest`) — Zona Protegida (autorizado 2026-11-13):**
+   - La CDN de los canales 24/7 está replicada en varios orígenes y cada uno devuelve un
+     `#EXT-X-MEDIA-SEQUENCE` con desfases distintos. Se midió en el CDN real la secuencia
+     `66498 → 66455 (-43) → 66502 (+47) → 66507 → 66463 (-44) → 66511 (+48)`.
+     El reproductor nativo de webOS interpreta esos saltos como un cambio de posición:
+     la imagen **se congela, se adelanta y luego retrocede un segundo**.
+   - **Regla obligatoria:** en los manifiestos 24/7 en vivo, `proxy.js` debe
+     **renumerar `#EXT-X-MEDIA-SEQUENCE` de forma monotónica por segmento** (clave = URI
+     del segmento, estado persistente `hlsSeqMap` / `hlsSeqNext` por token de proxy), de
+     modo que la secuencia entregada **siempre avance** y nunca retroceda por culpa de la
+     réplica de la CDN. Un segmento ya visto conserva su número; uno nuevo suma +1.
+   - Se debe entregar además una **ventana corta y estable** con solo los últimos
+     segmentos de la ventana 24/7 (se descartan los más antiguos, mínimo 3), ajustando
+     `#EXT-X-MEDIA-SEQUENCE` y `#EXT-X-DISCONTINUITY-SEQUENCE` al primer segmento servido,
+     conservando `#EXT-X-KEY` / `#EXT-X-MAP` si existieran.
+   - Se mantiene `#EXT-X-START:TIME-OFFSET=-15` como refuerzo del arranque cerca del borde en vivo.
+   - **Nunca tocar** con esta lógica los manifiestos VOD, los que llevan `#EXT-X-ENDLIST`
+     ni los canales en vivo normales (deben servirse completos y sin renumerar).
+   - El diagnóstico de la app (`HLS:`) debe seguir mostrando segmentos originales/entregados
+     y secuencias original/entregada (`segs=6/4 ms=66498/66500 start=...`) para poder
+     verificar de un vistazo que la renumeración está activa.
+   - Está prohibido simplificar, desactivar o eliminar esta normalización, y también
+     sustituirla por seeks, recortes de `currentTime` o reinicios de reproducción.
 
 ### Contrato obligatorio del Carrusel de Películas y Series (Estilo Netflix):
 1. **Rieles horizontales de catálogo (`.catalog-rail`):**
