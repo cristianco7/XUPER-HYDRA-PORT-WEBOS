@@ -1240,7 +1240,7 @@ function search(e, r, t) {
       "v3/searchByName",
       {
         value: n,
-        type: "0",
+        type: "1",
         columnId: "",
         filter: "",
         pageNum: page,
@@ -1272,90 +1272,99 @@ function detail(e, r, t) {
   if (!n) return r(new Error("falta contentId"));
   ensureSession(function (e) {
     if (e) return r(e);
-    call(
-      "v4/getItemData",
-      {
-        contentId: n,
-        type: "0",
-        sortType: "0",
-        language: "en",
-        macAddr: FIXED_MAC,
-      },
-      function (e, s) {
-        var a = itemCache[n] || null;
-        if (e)
-          return t || e.portalCode || /portal\d+/i.test(e.message || "")
-            ? e.portalCode || /portal/i.test(e.message)
-              ? r(null, {
-                  item: a || {
-                    id: n,
-                    title: "",
-                    kind: "película",
+    var cached = itemCache[n] || null;
+    var primaryType = cached && (cached.kind === "serie" || cached.type === "teleplay" || (cached.episodes && cached.episodes.length)) ? "0" : "1";
+    var tryCall = function (callType, isRetry) {
+      call(
+        "v4/getItemData",
+        {
+          contentId: n,
+          type: callType,
+          sortType: "0",
+          language: "en",
+          macAddr: FIXED_MAC,
+        },
+        function (err, s) {
+          if (err && !isRetry) {
+            var altType = callType === "1" ? "0" : "1";
+            return tryCall(altType, !0);
+          }
+          var a = itemCache[n] || cached || null;
+          if (err)
+            return t || err.portalCode || /portal\d+/i.test(err.message || "")
+              ? err.portalCode || /portal/i.test(err.message)
+                ? r(null, {
+                    item: a || {
+                      id: n,
+                      title: "",
+                      kind: "película",
+                      episodes: [],
+                      seasons: [],
+                      portal: !0,
+                    },
                     episodes: [],
                     seasons: [],
-                    portal: !0,
-                  },
-                  episodes: [],
-                  seasons: [],
-                })
-              : r(e)
-            : (console.log(
-                "[magis] reintentando detalle tras error temporal: " +
-                  e.message
-              ),
-              setTimeout(function () {
-                detail(n, r, !0);
-              }, 900));
-        var o = s && s.assetData;
-        if (!o)
-          return a
-            ? r(null, { item: a, episodes: [], seasons: [] })
-            : r(new Error("el portal no devolvió datos del título"));
-        var i = itemFromAsset(o, a ? a.category : "", null);
-        (a && ((i.row = a.row), (i.category = a.category)), remember(i));
-        var l = [],
-          u = o.simpleProgramList;
-        if (u && u.length)
-          for (var d = 0; d < u.length; d++) {
-            var c = u[d];
-            c &&
-              l.push({
-                id: trim(c.contentId),
-                title: text(c.name),
-                name: text(c.name),
-                number:
-                  void 0 === c.seriesNumber || null === c.seriesNumber
-                    ? d + 1
-                    : c.seriesNumber,
-                duration: text(c.duration),
-                quality: text(c.quality),
-                picture: text(
-                  c.picture ||
-                    c.pic ||
-                    c.image ||
-                    c.cover ||
-                    c.posterUrl ||
-                    c.poster
+                  })
+                : r(err)
+              : (console.log(
+                  "[magis] reintentando detalle tras error temporal: " +
+                    err.message
                 ),
-                description: text(
-                  c.description ||
-                    c.desc ||
-                    c.synopsis ||
-                    c.shortDescription ||
-                    c.introduce
-                ),
-              });
-          }
-        var f = [],
-          m = o.sameSeasonSeriesList;
-        if (m && m.length)
-          for (var p = 0; p < m.length; p++)
-            m[p] &&
-              trim(m[p].contentId) &&
-              f.push({ id: trim(m[p].contentId), number: m[p].seasonNumber });
-        r(null, { item: i, episodes: l, seasons: f });
-      }
-    );
+                setTimeout(function () {
+                  detail(n, r, !0);
+                }, 900));
+          var o = s && s.assetData;
+          if (!o)
+            return a
+              ? r(null, { item: a, episodes: [], seasons: [] })
+              : r(new Error("el portal no devolvió datos del título"));
+          var i = itemFromAsset(o, a ? a.category : "", null);
+          (a && ((i.row = a.row), (i.category = a.category)), remember(i));
+          var l = [],
+            u = o.simpleProgramList;
+          if (u && u.length)
+            for (var d = 0; d < u.length; d++) {
+              var c = u[d];
+              c &&
+                l.push({
+                  id: trim(c.contentId),
+                  title: text(c.name),
+                  name: text(c.name),
+                  number:
+                    void 0 === c.seriesNumber || null === c.seriesNumber
+                      ? d + 1
+                      : c.seriesNumber,
+                  duration: text(c.duration),
+                  quality: text(c.quality),
+                  picture: text(
+                    c.picture ||
+                      c.pic ||
+                      c.image ||
+                      c.cover ||
+                      c.posterUrl ||
+                      c.poster
+                  ),
+                  description: text(
+                    c.description ||
+                      c.desc ||
+                      c.synopsis ||
+                      c.shortDescription ||
+                      c.introduce
+                  ),
+                });
+            }
+          var f = [],
+            m = o.sameSeasonSeriesList;
+          if (m && m.length)
+            for (var p = 0; p < m.length; p++)
+              m[p] &&
+                trim(m[p].contentId) &&
+                f.push({ id: trim(m[p].contentId), number: m[p].seasonNumber });
+          r(null, { item: i, episodes: l, seasons: f });
+        }
+      );
+    };
+    tryCall(primaryType, !1);
   });
 }
 function slbBean() {

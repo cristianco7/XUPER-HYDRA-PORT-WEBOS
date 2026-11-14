@@ -301,6 +301,7 @@ div, section, span { outline: none; }
   transform-origin: 50% 50%;
   -webkit-transition: -webkit-transform .16s ease-out;
   transition: transform .16s ease-out;
+  will-change: transform;
 }
 .poster .p-img {
   position: absolute;
@@ -667,6 +668,11 @@ div, section, span { outline: none; }
   position: absolute;
   overflow: hidden;
   background: #161616;
+  -webkit-transform-origin: 50% 50%;
+  transform-origin: 50% 50%;
+  -webkit-transition: -webkit-transform .16s ease-out;
+  transition: transform .16s ease-out;
+  will-change: transform;
 }
 .bento-img {
   position: absolute;

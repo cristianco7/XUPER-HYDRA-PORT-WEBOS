@@ -1,9 +1,9 @@
 {
-    "version": "3.0.9",
+    "version": "3.1.6",
     "name": "XuperTV",
     "minWebos": "1.0.0",
-    "ipkUrl": "https://github.com/cristianco7/XUPER-HYDRA-PORT-WEBOS/releases/download/v3.0.9/com.webosflux.xuptertv.fidelity_3.0.9_all.ipk",
-    "sha256": "0A3300A13722E3F931F12E44169798D40C4B7E2B1FBCA467BA7EC939F3F661E2",
-    "changelog": "Versión 3.0.9: correcciones visuales y de estabilidad. Configuración global y Diagnóstico de red reestructurados con espaciado limpio y tabla flexbox sin textos ni líneas montadas (Dominio, DNS, Estado y Dirección real). En previsualización de series, las temporadas ya no se recortan a la derecha (Temporada 4+ visible y navegable) y los botones de temporada y capítulo son más grandes; el selector de rangos (1-20) se reserva para series de 1 sola temporada con muchos capítulos (One Piece, Naruto) para fácil navegación, omitiéndose en series multitemporada (Teen Wolf). Se amplía la barra de sugerencias de búsqueda con botones más legibles desde el sofá. En TV en vivo se elimina el ajuste de latencia que provocaba error de decodificación (MEDIA_ERR_DECODE err=3) y congelamiento en canales 24/7.",
-    "releaseDate": "2026-11-11"
+    "ipkUrl": "https://github.com/cristianco7/XUPER-HYDRA-PORT-WEBOS/releases/download/v3.1.6/com.webosflux.xuptertv.fidelity_3.1.6_all.ipk",
+    "sha256": "0F6C43A30F0FE745AF57C30E98C22FD312E548E8CC87B0CE7405E8DEDC7BF2D6",
+    "changelog": "Versión 3.1.6: más señales de DirecTV y ESPN en la categoría/addon \"DirecTV / ESPN\". Se añaden DSports 2, ON DIRECTV HD (por el portal con licencia) y ESPN Premium Argentina, y se suma ESPN 3 Brasil; todas verificadas de extremo a extremo a través del proxy (manifiesto, variante y segmento TS válido). Las señales previas de la 3.1.5 (ESPN Latinoamérica Colombia y México, ESPN/ESPN2/ESPNU Estados Unidos, ESPN Premium, ESPN Brasil, ESPN 4 Brasil y ESPN 8) siguen igual. Se mantiene la corrección de TV en vivo 24/7 de la 3.1.4.",
+    "releaseDate": "2026-11-14"
 }
