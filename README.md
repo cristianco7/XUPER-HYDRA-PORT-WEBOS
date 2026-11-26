@@ -104,7 +104,7 @@ Detalle fino de lo que falta en
 
 ## Instalación en el televisor
 
-### La forma fácil (sin comandos)
+### Windows (sin comandos)
 
 Pensado para quien solo tiene el archivo y no quiere tocar una terminal:
 
@@ -143,6 +143,36 @@ Detalles que resuelve solo, porque son la causa habitual de que falle:
 - Guía visual paso a paso (se abre sin internet, incluye **modo presentación**
   para grabar): [`docs/instalar/index.html`](docs/instalar/index.html)
 - Guion del vídeo tutorial: [`docs/instalar/guion-video.md`](docs/instalar/guion-video.md)
+
+### Linux (instalador Bash)
+
+1. Conecta el PC y el televisor a la misma red. En el televisor, abre la app
+   *Developer Mode*, activa **Dev Mode Status** y **Key Server**, y ten a mano
+   la dirección IP y la clave que muestra la app.
+2. En el PC, instala Bash 4 o posterior, el cliente OpenSSH (con `ssh`, `scp`,
+   `sftp` y `ssh-keygen`), `sshpass`, `curl`, Python 3, `tar`, `binutils` y
+   `coreutils`. En Debian o Ubuntu puedes instalar las dependencias con:
+
+   ```bash
+   sudo apt install bash openssh-client sshpass curl python3 tar binutils coreutils
+   ```
+
+3. Descarga el `.ipk` de la [última release](https://github.com/cristianco7/XUPER-HYDRA-PORT-WEBOS/releases/latest),
+   colócalo junto a `INSTALAR-XUPERTV.sh` y ejecuta desde esa carpeta:
+
+   ```bash
+   bash ./INSTALAR-XUPERTV.sh
+   ```
+
+4. Introduce la IP y, cuando se solicite, la clave de *Developer Mode*. Al
+   terminar, el instalador comprueba la versión instalada y abre XuperTV en la TV.
+
+Si tienes el paquete en otra carpeta, indica su ruta con `--ipk`. Puedes
+pasar la IP con `--tv-host` y ver todas las opciones con `--help`.
+
+```bash
+bash ./INSTALAR-XUPERTV.sh --ipk /ruta/al/paquete.ipk --tv-host 192.168.1.50
+```
 
 ### Instalación manual (ares-cli)
 
@@ -367,6 +397,7 @@ interfaz con una simple foto.
 ```
 webosflux/
 ├─ INSTALAR-XUPERTV.bat              instalador de doble clic para usuarios
+├─ INSTALAR-XUPERTV.sh               instalador Bash para Linux
 ├─ webos/
 │  ├─ fidelity/                     app web final (la que se empaqueta)
 │  │  ├─ index.html, css/, js/, data/, config/, assets/, images/

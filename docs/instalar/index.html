@@ -108,6 +108,7 @@
     font-size: 16px; margin: 20px 0;
   }
   .note { background: #eef2f7; color: #22303f; }
+  pre { max-width: 100%; overflow-x: auto; }
   .tip { background: #eaf6ee; color: #14532d; }
   .alert { background: #fdf0ef; color: #7a1218; }
   .note::before, .tip::before, .alert::before {
@@ -291,14 +292,15 @@
     </p>
     <div class="chips">
       <span class="chip"><b>TV</b> LG con webOS 4 o superior</span>
-      <span class="chip"><b>PC</b> Windows 10 u 11</span>
+      <span class="chip"><b>PC</b> Windows 10/11 o Linux</span>
       <span class="chip"><b>Red</b> la misma WiFi</span>
       <span class="chip"><b>Tiempo</b> ~15 min</span>
     </div>
 
     <div class="note">
       <b>Antes de empezar:</b> necesitas la carpeta que te han pasado, con dos cosas dentro:
-      <code>INSTALAR-XUPERTV.bat</code> y el archivo <code>.ipk</code> (el paquete de la app).
+      el archivo <code>.ipk</code> y el instalador para tu sistema,
+      <code>INSTALAR-XUPERTV.bat</code> en Windows o <code>INSTALAR-XUPERTV.sh</code> en Linux.
       Si te han pasado un ZIP, primero extráelo.
     </div>
   </header>
@@ -361,7 +363,7 @@
       <div class="step-num">2</div>
       <div>
         <h2>Preparar el ordenador</h2>
-        <p class="sub">Windows 10 y 11 ya traen todo lo necesario. No hay que instalar programas.</p>
+        <p class="sub">Prepara el paquete y el instalador para tu sistema.</p>
       </div>
     </div>
 
@@ -371,7 +373,7 @@
           <b>Extraer todo…</b> y elige una carpeta (por ejemplo, el Escritorio).</li>
         <li>Abre la carpeta extraída. Dentro tienen que estar estos archivos:
           <ul class="big" style="margin-top:8px">
-            <li><code>INSTALAR-XUPERTV.bat</code> — el instalador</li>
+            <li><code>INSTALAR-XUPERTV.bat</code> en Windows o <code>INSTALAR-XUPERTV.sh</code> en Linux</li>
             <li><code>instalar-tv.ps1</code> — su ayudante</li>
             <li><code>com.webosflux.xuptertv.fidelity_…_all.ipk</code> — la aplicación</li>
           </ul>
@@ -384,7 +386,7 @@
         <div class="link"></div>
         <div class="node"><span class="ico">📶</span><b>Router</b><span>la misma red</span></div>
         <div class="link"></div>
-        <div class="node"><span class="ico">💻</span><b>Tu PC</b><span>Windows 10/11</span></div>
+        <div class="node"><span class="ico">💻</span><b>Tu PC</b><span>Windows o Linux</span></div>
       </div>
 
       <div class="alert">
@@ -393,9 +395,13 @@
       </div>
 
       <div class="note">
-        <b>¿Y si uso Mac o Linux?</b> Esta guía cubre Windows. En Mac o Linux se puede hacer con
-        la herramienta oficial <code>ares-cli</code>; pide ayuda a quien te pasó la app o mira
-        el documento técnico del proyecto.
+        <h3>Dependencias en Linux</h3>
+        <p>Necesitas Bash 4 o posterior, el cliente OpenSSH, <code>sshpass</code>,
+        <code>curl</code>, Python 3, <code>tar</code>, <code>ar</code> y <code>timeout</code>.
+        En Debian o Ubuntu puedes instalarlos así.</p>
+        <pre><code>sudo apt install bash openssh-client sshpass curl python3 tar binutils coreutils</code></pre>
+        <p>En macOS puedes usar la herramienta <code>ares-cli</code>. Consulta la
+        <a href="../../README.md#instalación-manual-ares-cli">instalación manual</a>.</p>
       </div>
     </div>
   </section>
@@ -406,14 +412,18 @@
       <div class="step-num">3</div>
       <div>
         <h2>Ejecutar el instalador</h2>
-        <p class="sub">Un doble clic. Solo tienes que responder tres preguntas.</p>
+        <p class="sub">Abre el instalador y sigue las indicaciones que aparecen en pantalla.</p>
       </div>
     </div>
 
     <div class="card">
       <ol class="big">
-        <li>Haz <b>doble clic</b> en <code>INSTALAR-XUPERTV.bat</code>.
-          Se abre una ventana azul.</li>
+        <li>En Windows, haz <b>doble clic</b> en <code>INSTALAR-XUPERTV.bat</code>.
+          En Linux, activa <b>Key Server</b> en la app Developer Mode de la TV y ejecuta
+          este comando desde la carpeta del instalador.
+          <pre><code>bash ./INSTALAR-XUPERTV.sh</code></pre>
+          Si guardaste el paquete en otra carpeta, añade <code>--ipk /ruta/al/paquete.ipk</code>.
+        </li>
         <li>Escribe la <b>IP</b> que apuntaste en el paso 1 y pulsa <b>Enter</b>.
           <br><span style="color:var(--ink-soft);font-size:16px">¿No la sabes, o te dice que la TV no responde?
           Escribe <b>B</b> y Enter: el instalador busca el televisor en tu red y te lo propone.</span></li>
@@ -618,7 +628,7 @@
         <h3 style="margin-top:0">Actualizar</h3>
         <ol class="big">
           <li>Pon el nuevo <code>.ipk</code> en la carpeta del instalador.</li>
-          <li>Doble clic en <code>INSTALAR-XUPERTV.bat</code>.</li>
+          <li>Vuelve a ejecutar el instalador de Windows o Linux como en el paso 3.</li>
           <li>Si hay varios <code>.ipk</code>, elige el número del más nuevo.</li>
         </ol>
         <p style="color:var(--ink-soft);font-size:15px;margin-bottom:0">

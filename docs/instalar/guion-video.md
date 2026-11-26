@@ -240,7 +240,31 @@ contenido audiovisual.
   los cortes mucho más fáciles.
 - Música: algo suave y sin voz, al 10-15 % de volumen, solo de fondo.
 
-## 7. Miniatura sugerida
+## 7. Variante del vídeo para Linux
+
+Conserva las escenas del televisor y sustituye las tomas de Windows por una
+grabación de la terminal de Linux.
+
+1. Muestra que el PC y la TV están en la misma red y que **Key Server** está
+   activo en Developer Mode. Oculta la clave real de la TV en la grabación.
+2. Muestra `INSTALAR-XUPERTV.sh` y el archivo `.ipk` en la misma carpeta. Si
+   grabas en Debian o Ubuntu, muestra cómo instalar las dependencias.
+
+   ```bash
+   sudo apt install bash openssh-client sshpass curl python3 tar binutils coreutils
+   ```
+
+3. Abre la terminal en esa carpeta y ejecuta `bash ./INSTALAR-XUPERTV.sh`.
+   Introduce la IP del televisor y la clave de Developer Mode cuando se pida.
+4. Graba el mensaje **LISTO** y cambia a la toma de XuperTV abierta en la TV.
+
+**Locución**
+
+> En Linux, abre una terminal en la carpeta del instalador. Ejecuta el script,
+> escribe la IP del televisor y, cuando te la pida, la clave de Developer Mode.
+> La aplicación se abrirá al terminar la instalación.
+
+## 8. Miniatura sugerida
 
 Fondo oscuro con la captura del inicio de la app a la derecha y, a la izquierda,
 tres líneas grandes:
